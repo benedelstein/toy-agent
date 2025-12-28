@@ -42,9 +42,10 @@ class BashTool(Tool):
         print(f"Running bash command: {i.command}")
         # TODO: here you could present the menu with options to skip the command or run it
         # or always allow it (add command to some list of allowed commands)
-        a = input("Press Enter to continue or 'q' to skip ")
-        if a == "q":
-            return BashOutput(is_error=True, stderr=f"Command skipped: {i.command}")
+        a = input("Press Enter to continue or 'q [reason]' to skip > ")
+        if a.strip().lower().startswith("q"):
+            reason = a.strip()[1:].strip() or "no reason given"
+            return BashOutput(is_error=True, stderr=f"Command skipped: {i.command} - {reason}")
         result = self.session.execute_command(i.command)
         return BashOutput(stdout=result["stdout"], stderr=result["stderr"])
     

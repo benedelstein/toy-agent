@@ -25,7 +25,7 @@ class TextEditorInsertCommand(BaseModel):
     command: Literal["insert"]
     path: str
     insert_line: int
-    new_str: str
+    insert_text: str
     
 TextEditorCommand = Annotated[
     Union[TextEditorViewCommand, TextEditorStrReplaceCommand, TextEditorCreateCommand, TextEditorInsertCommand],
@@ -84,11 +84,11 @@ class TextEditorTool(Tool):
             
         elif cmd.command == "insert":
             self._validate_file(cmd.path)
-            self._confirm_command(cmd.command, cmd.path, cmd.new_str)
+            self._confirm_command(cmd.command, cmd.path, cmd.insert_text)
             with open(cmd.path, "a") as file:
                 # go to the line
                 file.seek(cmd.insert_line)
-                file.write(cmd.new_str)
+                file.write(cmd.insert_text)
             return TextEditorOutput(content=f"Line {cmd.insert_line} inserted")
         else:
             raise ValueError(f"Invalid command: {cmd.command}")

@@ -1,5 +1,5 @@
 import anthropic
-from anthropic.types import ContentBlock, ContentBlockParam, MessageParam, ServerToolUseBlockParam, TextBlockParam, ThinkingBlockParam, ThinkingConfigDisabledParam, ThinkingConfigEnabledParam, ToolChoiceAutoParam, ToolChoiceToolParam, ToolResultBlockParam, ToolUseBlockParam, WebSearchResultBlockParam, WebSearchToolRequestErrorParam, WebSearchToolResultBlockParam
+from anthropic.types import ContentBlock, ContentBlockParam, MessageParam, ModelParam, ServerToolUseBlockParam, TextBlockParam, ThinkingBlockParam, ThinkingConfigDisabledParam, ThinkingConfigEnabledParam, ToolChoiceAutoParam, ToolChoiceToolParam, ToolResultBlockParam, ToolUseBlockParam, WebSearchResultBlockParam, WebSearchToolRequestErrorParam, WebSearchToolResultBlockParam
 import json
 from settings import Settings
 from tools import TEXT_EDITOR_TOOL, Tool, ToolResult, OUTPUT_TOOL
@@ -13,10 +13,12 @@ class Agent:
         client: anthropic.Client,
         system_prompt: str | None = None, 
         tools: list[Tool] | None = None, 
-        thinking_enabled: bool = True
+        thinking_enabled: bool = True,
+        model: ModelParam = "claude-sonnet-4-5"
     ):
         self.settings = settings
-        self.client = client
+        self.model = model
+        self.client = client 
         self.system_prompt = system_prompt
         self.tools = tools
         self.history: list[MessageParam] = []
@@ -65,7 +67,7 @@ class Agent:
 
         response = self.client.messages.create(
             max_tokens=10001,
-            model="claude-sonnet-4-5",
+            model=self.model,
             messages=messages,
             thinking=ThinkingConfigEnabledParam(type="enabled", budget_tokens=10000) if use_thinking else ThinkingConfigDisabledParam(type="disabled"),
             system=self.system_prompt if self.system_prompt else anthropic.omit,
