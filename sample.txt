@@ -1,0 +1,9 @@
+Hello World!
+This is a sample file.
+We can use the str_replace command to modify it.
+The tool will show a diff preview.
+Line 5 is here.
+This is a new line added by the assistant!
+Here's another line with some useful info.
+Remember: Practice makes perfect! 🚀
+Last line added on this update.

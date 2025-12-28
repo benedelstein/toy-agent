@@ -49,7 +49,7 @@ The framework includes several pre-built tools:
 
 ## Architecture
 
-### Agent Class (`main.py`)
+### Agent Class (`agent.py`)
 The core `Agent` class handles:
 - System prompt configuration
 - Tool registration and management
@@ -99,7 +99,7 @@ Execute a single prompt and get a response.
 
 ### Programmatic Usage
 ```python
-from main import Agent
+from agent import Agent
 from tools import PING_TOOL, READ_FILE_TOOL, TEXT_EDITOR_TOOL
 
 agent = Agent(
@@ -137,7 +137,8 @@ ANTHROPIC_API_KEY=your_api_key_here
 
 ```
 toy-agent/
-├── main.py              # Core Agent class and entry point
+├── agent.py             # Core Agent class
+├── main.py              # CLI entry point and interactive REPL
 ├── tools/               # Tool implementations
 │   ├── __init__.py      # Tool exports
 │   ├── tool.py          # Base Tool and ToolResult classes
