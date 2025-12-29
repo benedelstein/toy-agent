@@ -5,14 +5,23 @@ import anthropic
 import dotenv
 from agent import Agent
 from settings import SETTINGS, EditMode
-from tools import BASH_TOOL, READ_FILE_TOOL, TEXT_EDITOR_TOOL, GLOB_TOOL, GREP_TOOL, PING_TOOL, SubAgentTool
+from tools import BASH_TOOL, READ_FILE_TOOL, TEXT_EDITOR_TOOL, GLOB_TOOL, GREP_TOOL, PING_TOOL, SubAgentTool, create_write_todos_tool
 from tools.sub_agent_tool import agent_types
+from app_state import AppState
 
 dotenv.load_dotenv()
 
-def load_system_prompt() -> str:
+app_state = AppState()
+
+def load_prompt_file(prompt_name: str) -> str:
+    """Load a prompt file from the prompts/ directory."""
+    prompt_path = os.path.join(os.path.dirname(__file__), "prompts", f"{prompt_name}.md")
+    with open(prompt_path, "r") as f:
+        return f.read()
+
+def load_system_prompt(prompt_name: str) -> str:
     """Load system prompt with CLAUDE.md context if available."""
-    base_prompt = "You are a helpful coding assistant."
+    base_prompt = load_prompt_file(prompt_name)
     
     claude_md_path = os.path.join(os.path.dirname(__file__), "CLAUDE.md")
     if os.path.exists(claude_md_path):
@@ -40,18 +49,18 @@ def create_agent(agent_type: agent_types) -> Agent:
         return Agent(
             settings=SETTINGS,
             client=client,
-            tools=[PING_TOOL, GLOB_TOOL, GREP_TOOL, READ_FILE_TOOL, BASH_TOOL], 
+            tools=[GLOB_TOOL, GREP_TOOL, READ_FILE_TOOL, BASH_TOOL], 
             thinking_enabled=False, 
-            system_prompt=load_system_prompt(),
+            system_prompt=load_system_prompt(prompt_name="explore_agent"),
             model="claude-haiku-4-5"
         )
     elif agent_type == "plan":
         return Agent(
             settings=SETTINGS,
             client=client,
-            tools=[PING_TOOL, GLOB_TOOL, GREP_TOOL, READ_FILE_TOOL, BASH_TOOL], 
+            tools=[GLOB_TOOL, GREP_TOOL, READ_FILE_TOOL, BASH_TOOL], 
             thinking_enabled=True, 
-            system_prompt=load_system_prompt(),
+            system_prompt=load_system_prompt(prompt_name="plan_agent"),
             model="claude-sonnet-4-5"
         )
 
@@ -59,14 +68,24 @@ def create_agent(agent_type: agent_types) -> Agent:
 SUB_AGENT_TOOL = SubAgentTool(
     create_agent=create_agent
 )
+WRITE_TODOS_TOOL = create_write_todos_tool(app_state)
 
 if __name__ == "__main__":
     agent = Agent(
         settings=SETTINGS,
         client=client,
-        tools=[PING_TOOL, GLOB_TOOL, GREP_TOOL, READ_FILE_TOOL, TEXT_EDITOR_TOOL, BASH_TOOL, SUB_AGENT_TOOL], 
+        tools=[
+            PING_TOOL,
+            GLOB_TOOL,
+            GREP_TOOL,
+            READ_FILE_TOOL, # do we need this if text_editor_tool also supports reading
+            TEXT_EDITOR_TOOL,
+            BASH_TOOL,
+            SUB_AGENT_TOOL,
+            WRITE_TODOS_TOOL
+        ], 
         thinking_enabled=True, 
-        system_prompt=load_system_prompt()
+        system_prompt=load_system_prompt(prompt_name="main_agent")
     )
     if len(sys.argv) > 1:
         prompt = sys.argv[1]

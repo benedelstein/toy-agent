@@ -11,6 +11,7 @@ class ReadFileOutput(BaseModel):
 def read_file(input: ReadFileInput) -> ReadFileOutput:
     from tools.utils import validate_path_within_project
     path = validate_path_within_project(input.path)
+    print(f"🔍 View file: {path}")
 
     if not os.path.exists(path):
         raise ValueError(f"File {path} does not exist")

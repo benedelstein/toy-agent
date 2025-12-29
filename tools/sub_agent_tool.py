@@ -49,6 +49,7 @@ class SubAgentTool(Tool):
         )
 
     def execute(self, input: dict) -> ToolResult[SubAgentOutput]:
+        print(f"🛠️ Executing sub-agent tool with input: {input}")
         try:
             input_model = SubAgentInput.model_validate(input)
             result = self._run_sub_agent(input_model)

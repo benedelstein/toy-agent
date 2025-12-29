@@ -87,7 +87,6 @@ class BashSession:
         while (time.time() - start_time) < timeout:
             try:
                 line = self.output_queue.get(timeout=0.1)
-                print("line", line)
                 if marker in line:
                     break
                 output_lines.append(line)
