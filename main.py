@@ -20,14 +20,14 @@ def load_prompt_file(prompt_name: str) -> str:
         return f.read()
 
 def load_system_prompt(prompt_name: str) -> str:
-    """Load system prompt with CLAUDE.md context if available."""
+    """Load system prompt with agents.md context if available."""
     base_prompt = load_prompt_file(prompt_name)
     
-    claude_md_path = os.path.join(os.path.dirname(__file__), "CLAUDE.md")
-    if os.path.exists(claude_md_path):
-        with open(claude_md_path, "r") as f:
-            claude_context = f.read()
-        return f"{base_prompt}\n\n{claude_context}"
+    agents_md_path = os.path.join(os.path.dirname(__file__), "agents.md")
+    if os.path.exists(agents_md_path):
+        with open(agents_md_path, "r") as f:
+            agents_context = f.read()
+        return f"{base_prompt}\n\n{agents_context}"
     
     return base_prompt
 
