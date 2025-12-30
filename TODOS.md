@@ -1,0 +1,7 @@
+- [ ] Github tool - gh cli? maybe need multiple tools, 1 for each action.
+- [ ] CLI formatting or better UI
+- [ ] Stream responses
+- [ ] Interrupt responses
+- [ ] Optimize Prompts
+- [ ] Tool search
+- [ ] Deploy as background agent with sandbox vm? End to end: issue -> code -> verify -> pr 

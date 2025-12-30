@@ -1,5 +1,4 @@
 import sys
-from typing import Literal
 import os
 import anthropic
 import dotenv
@@ -85,6 +84,7 @@ if __name__ == "__main__":
             WRITE_TODOS_TOOL
         ], 
         thinking_enabled=True, 
+        model="claude-opus-4-5",
         system_prompt=load_system_prompt(prompt_name="main_agent")
     )
     if len(sys.argv) > 1:
