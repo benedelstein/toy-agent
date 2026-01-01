@@ -5,6 +5,7 @@ import dotenv
 from agent import Agent
 from settings import SETTINGS, EditMode
 from tools import BASH_TOOL, READ_FILE_TOOL, TEXT_EDITOR_TOOL, GLOB_TOOL, GREP_TOOL, PING_TOOL, SubAgentTool, create_write_todos_tool
+from tools.github_tool import CREATE_PULL_REQUEST_TOOL
 from tools.sub_agent_tool import agent_types
 from app_state import AppState
 
@@ -77,11 +78,12 @@ if __name__ == "__main__":
             PING_TOOL,
             GLOB_TOOL,
             GREP_TOOL,
-            READ_FILE_TOOL, # do we need this if text_editor_tool also supports reading
+            READ_FILE_TOOL, # do we need this if text_editor_tool also supports reading. yes if in plan mode. 
             TEXT_EDITOR_TOOL,
             BASH_TOOL,
             SUB_AGENT_TOOL,
-            WRITE_TODOS_TOOL
+            WRITE_TODOS_TOOL,
+            CREATE_PULL_REQUEST_TOOL
         ], 
         thinking_enabled=True, 
         model="claude-opus-4-5",

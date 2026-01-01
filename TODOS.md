@@ -1,4 +1,4 @@
-- [ ] Github tool - gh cli? maybe need multiple tools, 1 for each action.
+- [x] Github tool - gh cli? maybe need multiple tools, 1 for each action.
 - [ ] CLI formatting or better UI
 - [ ] Stream responses
 - [ ] Interrupt responses
