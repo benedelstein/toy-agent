@@ -29,6 +29,9 @@ class SubAgentTool(Tool):
             description="""
             A tool that spawns a sub-agent to handle complex tasks. Use this tool to offload tasks to a new agent with fresh context and specialized focus.
             For example, you may want to use this to explore part of a codebase. The `agent_type` parameter determines what the subagent is used for.
+            The `prompt` parameter tells the agent what to focus on. Be very descriptive in your prompt! 
+            For example, for a `plan` agent, you should write out a detailed spec for what you want it to plan - describe the problem in detail, point to any relevant files, and describe the desired solution.
+            Mention any details or suggestions that the user has provided.
             """,
             input_schema=SubAgentInput,
             output_schema=SubAgentOutput,
