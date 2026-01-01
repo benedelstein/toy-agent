@@ -1,7 +1,7 @@
 import subprocess
 from pydantic import BaseModel
-
 from tools.tool import Tool
+from events import EventEmitter
 
 
 class CreatePullRequestInput(BaseModel):
@@ -10,8 +10,10 @@ class CreatePullRequestInput(BaseModel):
     base: str
     draft: bool = False
 
+
 class CreatePullRequestOutput(BaseModel):
     url: str
+
 
 def create_pull_request(input: CreatePullRequestInput) -> CreatePullRequestOutput:
     # gh pr create --title <title> --body <description> --base <base>
@@ -26,12 +28,15 @@ def create_pull_request(input: CreatePullRequestInput) -> CreatePullRequestOutpu
     url = output.stdout.strip()
     return CreatePullRequestOutput(url=url)
 
-CREATE_PULL_REQUEST_TOOL = Tool(
-    tool_name="create_pull_request",
-    description="""Create a pull request on Github. Call this tool when you are ready to create a pr to merge your changes into the main branch.
-    After you have completed a feature, call this tool to start getting your changes reviewed and merged.
-    """,
-    input_schema=CreatePullRequestInput,
-    output_schema=CreatePullRequestOutput,
-    run=create_pull_request
-)
+
+def create_pull_request_tool(emitter: EventEmitter) -> Tool:
+    return Tool(
+        tool_name="create_pull_request",
+        description="""Create a pull request on Github. Call this tool when you are ready to create a pr to merge your changes into the main branch.
+        After you have completed a feature, call this tool to start getting your changes reviewed and merged.
+        """,
+        input_schema=CreatePullRequestInput,
+        output_schema=CreatePullRequestOutput,
+        run=create_pull_request,
+        emitter=emitter
+    )

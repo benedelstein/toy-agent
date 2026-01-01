@@ -1,26 +1,31 @@
 from tools.tool import Tool, ToolResult
-from tools.bash_tool import BashTool, BASH_TOOL
+from tools.bash_tool import BashTool, create_bash_tool
 from tools.bash_session import BashSession
-from tools.glob_tool import GLOB_TOOL
-from tools.grep_tool import GREP_TOOL
-from tools.ping_tool import PING_TOOL
-from tools.output_tool import OUTPUT_TOOL
-from tools.read_file_tool import READ_FILE_TOOL
-from tools.text_editor_tool import TEXT_EDITOR_TOOL
-from tools.sub_agent_tool import SubAgentTool
-from tools.todo_tool import create_write_todos_tool
+from tools.glob_tool import create_glob_tool
+from tools.grep_tool import create_grep_tool
+from tools.ping_tool import create_ping_tool
+from tools.output_tool import create_output_tool
+from tools.read_file_tool import ReadFileTool, create_read_file_tool
+from tools.text_editor_tool import TextEditorTool, create_text_editor_tool
+from tools.sub_agent_tool import SubAgentTool, create_sub_agent_tool
+from tools.todo_tool import WriteTodosTool, create_write_todos_tool
+
 __all__ = [
     "Tool",
     "ToolResult",
     "BashTool",
     "BashSession",
+    "ReadFileTool",
+    "TextEditorTool",
     "SubAgentTool",
-    "BASH_TOOL",
-    "GLOB_TOOL",
-    "GREP_TOOL",
-    "PING_TOOL",
-    "OUTPUT_TOOL",
-    "READ_FILE_TOOL",
-    "TEXT_EDITOR_TOOL",
+    "WriteTodosTool",
+    "create_bash_tool",
+    "create_glob_tool",
+    "create_grep_tool",
+    "create_ping_tool",
+    "create_output_tool",
+    "create_read_file_tool",
+    "create_text_editor_tool",
+    "create_sub_agent_tool",
     "create_write_todos_tool",
 ]

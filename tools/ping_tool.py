@@ -1,13 +1,17 @@
 from pydantic import BaseModel
 from tools.tool import Tool
+from events import EventEmitter
 import subprocess
+
 
 class PingInput(BaseModel):
     url: str
 
+
 class PingOutput(BaseModel):
     response: str
-    
+
+
 def run_ping(input: PingInput) -> PingOutput:
     url = input.url
     result = subprocess.run(
@@ -19,10 +23,13 @@ def run_ping(input: PingInput) -> PingOutput:
     )
     return PingOutput(response=result.stdout)
 
-PING_TOOL = Tool(
-    tool_name="ping",
-    description=f"Ping a host for connectivity stats. Call like so {{'url': 'example.com'}}",
-    input_schema=PingInput,
-    output_schema=PingOutput,
-    run=run_ping
-)
+
+def create_ping_tool(emitter: EventEmitter) -> Tool:
+    return Tool(
+        tool_name="ping",
+        description=f"Ping a host for connectivity stats. Call like so {{'url': 'example.com'}}",
+        input_schema=PingInput,
+        output_schema=PingOutput,
+        run=run_ping,
+        emitter=emitter
+    )

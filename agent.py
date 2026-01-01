@@ -2,28 +2,40 @@ import anthropic
 from anthropic.types import ContentBlock, ContentBlockParam, MessageParam, ModelParam, ServerToolUseBlockParam, TextBlockParam, ThinkingBlockParam, ThinkingConfigDisabledParam, ThinkingConfigEnabledParam, ToolChoiceAutoParam, ToolChoiceToolParam, ToolResultBlockParam, ToolUseBlockParam, WebSearchResultBlockParam, WebSearchToolRequestErrorParam, WebSearchToolResultBlockParam
 import json
 from settings import Settings
-from tools import TEXT_EDITOR_TOOL, Tool, ToolResult, OUTPUT_TOOL
+from tools import Tool, ToolResult
+from tools.output_tool import create_output_tool
+from events import EventEmitter, AssistantMessageEvent, WebSearchErrorEvent, UnknownContentEvent
+
+# Tool name constant for text editor filtering
+TEXT_EDITOR_TOOL_NAME = "str_replace_based_edit_tool"
+
 
 class Agent:
     client: anthropic.Client
     settings: Settings
+
     def __init__(
-        self, 
-        settings: Settings, 
+        self,
+        settings: Settings,
         client: anthropic.Client,
-        system_prompt: str | None = None, 
-        tools: list[Tool] | None = None, 
+        system_prompt: str | None = None,
+        tools: list[Tool] | None = None,
         thinking_enabled: bool = True,
-        model: ModelParam = "claude-sonnet-4-5"
+        model: ModelParam = "claude-sonnet-4-5",
+        emitter: EventEmitter | None = None
     ):
         self.settings = settings
         self.model = model
-        self.client = client 
+        self.client = client
         self.system_prompt = system_prompt
         self.tools = tools
         self.history: list[MessageParam] = []
         self.thinking_enabled = thinking_enabled
         self.tool_dict: dict[str, Tool] = {tool.tool_name: tool for tool in tools} if tools else {}
+        self.emitter = emitter or EventEmitter()
+
+        # Create output tool with this agent's emitter
+        self.output_tool = create_output_tool(self.emitter)
 
     def _get_messages_for_api(self, use_thinking: bool) -> list[MessageParam]:
         """Build messages list, stripping thinking blocks if thinking is disabled."""
@@ -50,14 +62,14 @@ class Agent:
         actual_tools = []
         if require_output:
             # force the output tool to be called
-            actual_tools = [OUTPUT_TOOL]
+            actual_tools = [self.output_tool]
         elif self.tools:
             # filter out edit tool if edit mode is never
             if self.settings.edit_mode == "never":
-                actual_tools.extend([tool for tool in self.tools if tool.tool_name != TEXT_EDITOR_TOOL.tool_name])
+                actual_tools.extend([tool for tool in self.tools if tool.tool_name != TEXT_EDITOR_TOOL_NAME])
             else:
                 actual_tools.extend(self.tools)
-            actual_tools.append(OUTPUT_TOOL) # may also call the output early. if we want, we could add some setting to disable early outputs.
+            actual_tools.append(self.output_tool)  # may also call the output early
         else:
             actual_tools = None
 
@@ -71,15 +83,15 @@ class Agent:
             messages=messages,
             thinking=ThinkingConfigEnabledParam(type="enabled", budget_tokens=10000) if use_thinking else ThinkingConfigDisabledParam(type="disabled"),
             system=self.system_prompt if self.system_prompt else anthropic.omit,
-            tool_choice=ToolChoiceToolParam(name=OUTPUT_TOOL.tool_name, type="tool") if require_output else ToolChoiceAutoParam(type="auto"),
+            tool_choice=ToolChoiceToolParam(name=self.output_tool.tool_name, type="tool") if require_output else ToolChoiceAutoParam(type="auto"),
             tools=[tool.to_anthropic_tool() for tool in actual_tools] if actual_tools else anthropic.omit,
         )
         return response.content
 
     def _handle_tool_call(self, tool_name: str, input: dict) -> ToolResult:
-        if tool_name == OUTPUT_TOOL.tool_name:
-            return OUTPUT_TOOL.execute(input)
-        tool = self.tool_dict[tool_name]
+        if tool_name == self.output_tool.tool_name:
+            return self.output_tool.execute(input)
+        tool = self.tool_dict.get(tool_name)
         if tool is None:
             raise ValueError(f"Tool {tool_name} not found")
         return tool.execute(input)
@@ -99,7 +111,7 @@ class Agent:
                     ThinkingBlockParam(type="thinking", thinking=content.thinking, signature=content.signature)
                 )
             elif content.type == "text":
-                print(f"💬 {content.text}")
+                self.emitter.emit(AssistantMessageEvent(text=content.text))
                 text_only_content.append(content.text)
                 assistant_content.append(
                     TextBlockParam(type="text", text=content.text)
@@ -132,7 +144,7 @@ class Agent:
                         )
                     )
                 else:
-                    print(f"web search error: {content.content.error_code}")
+                    self.emitter.emit(WebSearchErrorEvent(error_code=content.content.error_code))
                     assistant_content.append(
                         WebSearchToolResultBlockParam(
                             type="web_search_tool_result",
@@ -144,7 +156,7 @@ class Agent:
                         )
                     )
             else:
-                print(f"unknown content type: {content.type}")
+                self.emitter.emit(UnknownContentEvent(content_type=content.type))
 
         # Add the assistant message with all content blocks
         if assistant_content:
@@ -162,8 +174,7 @@ class Agent:
             for tool_id, tool_name, tool_input in tool_calls:
                 tool_result = self._handle_tool_call(tool_name, tool_input)
                 result_dict = tool_result.to_dict()
-                if tool_result.is_error:
-                    print(f"🛠️ Tool {tool_name} error: {tool_result.error}")
+                # Tool errors are now emitted by Tool.execute() via the event system
                 tool_results.append(
                     ToolResultBlockParam(
                         type="tool_result",
@@ -192,6 +203,6 @@ class Agent:
             if result is not None:
                 return result
         raise Exception("Error: max iterations reached")
-    
+
     def reset(self):
-        self.__init__(settings=self.settings, client=self.client)
+        self.__init__(settings=self.settings, client=self.client, emitter=self.emitter)
