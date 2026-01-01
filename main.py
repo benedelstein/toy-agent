@@ -6,7 +6,7 @@ import dotenv
 
 from agent import Agent
 from app_state import AppState
-from cli_handler import CLIConfirmationHandler, CLIEventHandler
+from cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
 from events import EventEmitter, FinalOutputEvent
 from settings import SETTINGS, EditMode
 from tools import (
@@ -31,6 +31,7 @@ client = anthropic.Client()
 emitter = EventEmitter()
 emitter.add_handler(CLIEventHandler(verbose=False))
 emitter.set_confirmation_handler(CLIConfirmationHandler())
+emitter.set_input_handler(CLIInputHandler(prompt_prefix="> "))
 
 
 def load_prompt_file(prompt_name: str) -> str:
@@ -99,7 +100,8 @@ def create_agent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
         )
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for the toy-agent CLI."""
     agent = Agent(
         settings=SETTINGS,
         client=client,
@@ -123,10 +125,13 @@ if __name__ == "__main__":
         prompt = sys.argv[1]
         result = agent.run(prompt=prompt, max_iterations=None)
         emitter.emit(FinalOutputEvent(result=result))
-    else:
-        pass
+
     while True:
-        prompt = input("> ")
+        prompt = emitter.request_input("> ")
         result = handle_prompt(prompt, agent)
         emitter.emit(FinalOutputEvent(result=result))
         print()  # Add newline after output
+
+
+if __name__ == "__main__":
+    main()

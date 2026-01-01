@@ -99,12 +99,25 @@ class ConfirmationHandler(Protocol):
         ...
 
 
+class InputHandler(Protocol):
+    """Protocol for requesting user input"""
+
+    def request_input(self, prompt: str) -> str:
+        """
+        Request input from the user.
+        - prompt: The prompt to display to the user
+        - returns: The user's input string
+        """
+        ...
+
+
 class EventEmitter:
     """Simple event emitter for agent/tool events"""
 
     def __init__(self):
         self._handlers: list[EventHandler] = []
         self._confirmation_handler: ConfirmationHandler | None = None
+        self._input_handler: InputHandler | None = None
 
     def add_handler(self, handler: EventHandler) -> None:
         """Register an event handler"""
@@ -117,6 +130,10 @@ class EventEmitter:
     def set_confirmation_handler(self, handler: ConfirmationHandler) -> None:
         """Set the confirmation callback handler"""
         self._confirmation_handler = handler
+
+    def set_input_handler(self, handler: InputHandler) -> None:
+        """Set the input handler"""
+        self._input_handler = handler
 
     def emit(self, event: Event) -> None:
         """Emit an event to all registered handlers"""
@@ -131,3 +148,9 @@ class EventEmitter:
             # Default: always approve if no handler set
             return (True, None)
         return self._confirmation_handler.request_confirmation(tool_name, action, path, preview)
+
+    def request_input(self, prompt: str) -> str:
+        """Request user input via the registered handler"""
+        if self._input_handler is None:
+            raise RuntimeError("No input handler registered")
+        return self._input_handler.request_input(prompt)

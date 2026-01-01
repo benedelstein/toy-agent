@@ -1,3 +1,5 @@
+from rich.console import Console
+from rich.markdown import Markdown
 from events import (
     AssistantMessageEvent,
     ConfirmationHandler,
@@ -5,6 +7,7 @@ from events import (
     EventHandler,
     FileViewedEvent,
     FinalOutputEvent,
+    InputHandler,
     TodosUpdatedEvent,
     ToolCompletedEvent,
     ToolErrorEvent,
@@ -19,6 +22,7 @@ class CLIEventHandler(EventHandler):
 
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
+        self.console = Console()
 
     def handle(self, event: Event) -> None:
         # Pattern match on strongly typed events - type checker validates field access
@@ -27,19 +31,20 @@ class CLIEventHandler(EventHandler):
                 print(f"💬 {text}")
 
             case ToolErrorEvent(tool_name=name, error=err):
-                print(f"🛠️ Tool {name} error: {err}")
+                self.console.print(f"🛠️ [bold red]Tool {name} error:[/bold red] {err}")
 
             case FileViewedEvent(path=path):
-                print(f"🔍 View file: {path}")
+                self.console.print(f"🔍 [bold blue]View file:[/bold blue] {path}")
 
             case WebSearchErrorEvent(error_code=code):
-                print(f"web search error: {code}")
+                self.console.print(f"🛠️ [bold red]Web search error:[/bold red] {code}")
 
             case UnknownContentEvent(content_type=ct):
-                print(f"unknown content type: {ct}")
+                self.console.print(f"🛠️ [bold red]Unknown content type:[/bold red] {ct}")
 
             case FinalOutputEvent(result=result):
-                print(f"💡 {result}")
+                markdown = Markdown(result)
+                self.console.print(f"💡 {markdown}")
 
             case TodosUpdatedEvent(todos=todos):
                 print("--------------------------------")
@@ -49,17 +54,20 @@ class CLIEventHandler(EventHandler):
                     print(f"[{status_mark}]: {todo.title}")
                 print("--------------------------------")
 
-            case ToolStartedEvent(tool_name=name):
+            case ToolStartedEvent(tool_name=name, input=input):
                 if self.verbose:
-                    print(f"🛠️ Starting {name}...")
+                    self.console.print(f"🛠️ [bold blue]Using {name}...[/bold blue]: {str(input)[0:100]}")
 
             case ToolCompletedEvent(tool_name=name):
                 if self.verbose:
-                    print(f"✅ {name} completed")
+                    self.console.print(f"🛠️ [bold green]{name} completed[/bold green]")
 
 
 class CLIConfirmationHandler(ConfirmationHandler):
     """CLI confirmation handler using input()"""
+    
+    def __init__(self):
+        self.console = Console()
 
     def request_confirmation(
         self, tool_name: str, action: str, path: str | None, preview: str
@@ -68,16 +76,29 @@ class CLIConfirmationHandler(ConfirmationHandler):
 
         # Display the preview
         if path:
-            print(f"🛠️ Confirming command '{action}' on file '{path}'")
+            self.console.print(f"🛠️ Confirming command '[bold blue]{action}[/bold blue]' on file '[bold blue]{path}[/bold blue]'")
         else:
-            print(f"🛠️ Confirming: {action}")
-        print(preview)
+            self.console.print(f"🛠️ [bold blue]Confirming:[/bold blue] {action}")
+        self.console.print(preview)
 
         # Get user input
-        answer = input("🛠️ Press Enter to continue or 'q [reason]' to skip > ")
+        answer = self.console.input("[bold]🛠️ Press Enter to continue or 'q \[reason\]' to skip > [/bold]")
 
         if answer.strip().lower().startswith("q"):
             reason = answer.strip()[1:].strip() or "no reason given"
             return (False, reason)
 
         return (True, None)
+
+
+class CLIInputHandler(InputHandler):
+    """CLI input handler using input()"""
+
+    def __init__(self, prompt_prefix: str = "> "):
+        self.prompt_prefix = prompt_prefix
+        self.console = Console()
+
+    def request_input(self, prompt: str) -> str:
+        """Request input from user via CLI"""
+        display_prompt = prompt if prompt else self.prompt_prefix
+        return self.console.input(f"[yellow bold]{display_prompt}[/yellow bold]")
