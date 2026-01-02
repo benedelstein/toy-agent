@@ -205,7 +205,7 @@ class TextEditorTool(Tool):
             tool_name="str_replace_based_edit_tool", action=command, path=path, preview=contents
         )
         if not approved:
-            raise ValueError(f"Command '{command}' on file '{path}' skipped")
+            raise ValueError(f"Command '{command}' on file '{path}' skipped - user-provided reason: {reason or 'no reason given'}")
         return True
 
     def to_anthropic_tool(self) -> ToolUnionParam:
@@ -229,7 +229,7 @@ class TextEditorTool(Tool):
             )
             return ToolResult(data=result)
         except Exception as e:
-            self.emitter.emit(ToolErrorEvent(tool_name=self.tool_name, error=str(e)))
+            self.emitter.emit(ToolErrorEvent(tool_name=input["command"], error=str(e)))
             return ToolResult(success=False, error=str(e))
 
 

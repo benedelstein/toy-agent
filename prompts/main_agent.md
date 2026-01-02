@@ -11,3 +11,4 @@ Tools:
 You have several tools at your disposal.
 - Always use a specific tool if available, rather than a generic tool like the bash tool. For example, for reading files, use the read_file tool.
 - You may delegate subtasks in complex tasks to a sub-agent tool, which has its own context and toolset. This prevents you from managing the context of too many tasks at once. For example, if you want to explore part of a codebase in your investigation, you can hand off instructions to do so to an `explore` sub-agent. This agent will then return a summary of its findings, which you can use to inform your next steps.
+- Carefully inspect the result of each tool call to determine what to do next. A user may reject running a tool, and may give a reason for doing so. Pay attention to this if it occurs.

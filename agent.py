@@ -209,21 +209,23 @@ class Agent:
         # Now execute tools and add results as user messages
         if tool_calls:
             tool_results: list[ToolResultBlockParam] = []
+
             for tool_id, tool_name, tool_input in tool_calls:
                 tool_result = self._handle_tool_call(tool_name, tool_input)
                 result_dict = tool_result.to_dict()
-                # Tool errors are now emitted by Tool.execute() via the event system
-                tool_results.append(
-                    ToolResultBlockParam(
-                        type="tool_result",
-                        tool_use_id=tool_id,
-                        is_error=tool_result.is_error,
-                        content=json.dumps(result_dict),
-                    )
-                )
                 # Check if this is the output tool
                 if tool_name == "output" and tool_result.data:
                     output_result = tool_result.data.result
+                else:
+                    # Tool errors are now emitted by Tool.execute() via the event system
+                    tool_results.append(
+                        ToolResultBlockParam(
+                            type="tool_result",
+                            tool_use_id=tool_id,
+                            is_error=tool_result.is_error,
+                            content=json.dumps(result_dict),
+                        )
+                    )
 
             # Add all tool results as a single user message
             self.history.append(MessageParam(role="user", content=tool_results))

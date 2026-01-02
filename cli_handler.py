@@ -44,7 +44,7 @@ class CLIEventHandler(EventHandler):
 
             case FinalOutputEvent(result=result):
                 markdown = Markdown(result)
-                self.console.print(f"💡 {markdown}")
+                self.console.print("💡", markdown)
 
             case TodosUpdatedEvent(todos=todos):
                 print("--------------------------------")
