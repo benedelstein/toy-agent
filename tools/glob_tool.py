@@ -1,13 +1,19 @@
 import glob as glob_module
 import os
+
 from pydantic import BaseModel, Field
-from tools.tool import Tool
+
 from events import EventEmitter
+from tools.tool import Tool
 
 
 class GlobInput(BaseModel):
-    pattern: str = Field(description="Glob pattern to match files (e.g., '*.py', '**/*.txt', 'src/**/*.js')")
-    recursive: bool = Field(default=False, description="Whether to use recursive globbing (allows ** pattern)")
+    pattern: str = Field(
+        description="Glob pattern to match files (e.g., '*.py', '**/*.txt', 'src/**/*.js')"
+    )
+    recursive: bool = Field(
+        default=False, description="Whether to use recursive globbing (allows ** pattern)"
+    )
 
 
 class GlobOutput(BaseModel):
@@ -63,5 +69,5 @@ def create_glob_tool(emitter: EventEmitter) -> Tool:
         input_schema=GlobInput,
         output_schema=GlobOutput,
         run=run_glob,
-        emitter=emitter
+        emitter=emitter,
     )

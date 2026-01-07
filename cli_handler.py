@@ -1,16 +1,16 @@
 from events import (
+    AssistantMessageEvent,
+    ConfirmationHandler,
     Event,
     EventHandler,
-    ConfirmationHandler,
-    ToolStartedEvent,
-    ToolCompletedEvent,
-    ToolErrorEvent,
-    AssistantMessageEvent,
     FileViewedEvent,
-    WebSearchErrorEvent,
-    UnknownContentEvent,
     FinalOutputEvent,
     TodosUpdatedEvent,
+    ToolCompletedEvent,
+    ToolErrorEvent,
+    ToolStartedEvent,
+    UnknownContentEvent,
+    WebSearchErrorEvent,
 )
 
 

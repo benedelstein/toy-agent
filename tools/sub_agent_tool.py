@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Callable, Literal
+
+from anthropic.types import ToolParam, ToolUnionParam
 from pydantic import BaseModel, Field
-from anthropic.types import ToolUnionParam, ToolParam
+
+from events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
 from tools.tool import Tool, ToolResult
-from events import EventEmitter, ToolStartedEvent, ToolCompletedEvent, ToolErrorEvent
 
 if TYPE_CHECKING:
     from agent import Agent
@@ -12,7 +15,9 @@ agent_types = Literal["explore", "plan"]
 
 
 class SubAgentInput(BaseModel):
-    agent_type: agent_types = Field(description="The type of sub-agent to create, specialized for different tasks.")
+    agent_type: agent_types = Field(
+        description="The type of sub-agent to create, specialized for different tasks."
+    )
     prompt: str = Field(description="The prompt to send to the sub-agent")
 
 
@@ -41,7 +46,7 @@ class SubAgentTool(Tool):
             input_schema=SubAgentInput,
             output_schema=SubAgentOutput,
             run=self._run_sub_agent,
-            emitter=emitter
+            emitter=emitter,
         )
 
     def _run_sub_agent(self, input: SubAgentInput) -> SubAgentOutput:
@@ -55,7 +60,7 @@ class SubAgentTool(Tool):
             name=self.tool_name,
             description=self.description,
             input_schema=SubAgentInput.model_json_schema(),
-            type="custom"
+            type="custom",
         )
 
     def execute(self, input: dict) -> ToolResult[SubAgentOutput]:
@@ -65,10 +70,11 @@ class SubAgentTool(Tool):
             input_model = SubAgentInput.model_validate(input)
             result = self._run_sub_agent(input_model)
 
-            self.emitter.emit(ToolCompletedEvent(
-                tool_name=self.tool_name,
-                output=result.model_dump() if result else None
-            ))
+            self.emitter.emit(
+                ToolCompletedEvent(
+                    tool_name=self.tool_name, output=result.model_dump() if result else None
+                )
+            )
             return ToolResult(data=result)
         except Exception as e:
             self.emitter.emit(ToolErrorEvent(tool_name=self.tool_name, error=str(e)))
@@ -76,7 +82,6 @@ class SubAgentTool(Tool):
 
 
 def create_sub_agent_tool(
-    emitter: EventEmitter,
-    create_agent: Callable[[agent_types, EventEmitter], Agent]
+    emitter: EventEmitter, create_agent: Callable[[agent_types, EventEmitter], Agent]
 ) -> SubAgentTool:
     return SubAgentTool(emitter=emitter, create_agent=create_agent)

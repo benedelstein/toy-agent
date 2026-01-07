@@ -1,7 +1,8 @@
 import os
 from functools import lru_cache
 
-MARKER_FILES = ['.git', 'pyproject.toml', 'setup.py', 'setup.cfg']
+MARKER_FILES = [".git", "pyproject.toml", "setup.py", "setup.cfg"]
+
 
 @lru_cache(maxsize=1)
 def get_project_root() -> str:

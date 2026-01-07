@@ -1,6 +1,7 @@
 from pydantic import BaseModel
-from tools.tool import Tool
+
 from events import EventEmitter
+from tools.tool import Tool
 
 
 class OutputToolInput(BaseModel):
@@ -22,5 +23,5 @@ def create_output_tool(emitter: EventEmitter) -> Tool:
         input_schema=OutputToolInput,
         output_schema=OutputToolOutput,
         run=run_output,
-        emitter=emitter
+        emitter=emitter,
     )

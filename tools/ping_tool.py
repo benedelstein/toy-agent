@@ -1,7 +1,9 @@
-from pydantic import BaseModel
-from tools.tool import Tool
-from events import EventEmitter
 import subprocess
+
+from pydantic import BaseModel
+
+from events import EventEmitter
+from tools.tool import Tool
 
 
 class PingInput(BaseModel):
@@ -19,7 +21,7 @@ def run_ping(input: PingInput) -> PingOutput:
         text=True,
         stderr=subprocess.STDOUT,
         stdout=subprocess.PIPE,
-        timeout=10
+        timeout=10,
     )
     return PingOutput(response=result.stdout)
 
@@ -27,9 +29,9 @@ def run_ping(input: PingInput) -> PingOutput:
 def create_ping_tool(emitter: EventEmitter) -> Tool:
     return Tool(
         tool_name="ping",
-        description=f"Ping a host for connectivity stats. Call like so {{'url': 'example.com'}}",
+        description="Ping a host for connectivity stats. Call like so {'url': 'example.com'}",
         input_schema=PingInput,
         output_schema=PingOutput,
         run=run_ping,
-        emitter=emitter
+        emitter=emitter,
     )

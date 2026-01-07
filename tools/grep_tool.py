@@ -1,9 +1,10 @@
-import os
-from pydantic import BaseModel
-from tools.tool import Tool
-from events import EventEmitter
-from typing import Literal
 import subprocess
+from typing import Literal
+
+from pydantic import BaseModel
+
+from events import EventEmitter
+from tools.tool import Tool
 
 
 class GrepInput(BaseModel):
@@ -18,15 +19,11 @@ class GrepOutput(BaseModel):
 
 def run_grep(input: GrepInput) -> GrepOutput:
     from tools.utils import validate_path_within_project
+
     absolute_path = validate_path_within_project(input.file)
     cmd = ["grep"] + input.flags + [input.pattern, absolute_path]
 
-    result = subprocess.run(
-        cmd,
-        text=True,
-        capture_output=True,
-        timeout=10
-    )
+    result = subprocess.run(cmd, text=True, capture_output=True, timeout=10)
     return GrepOutput(result=result.stdout)
 
 
@@ -37,5 +34,5 @@ def create_grep_tool(emitter: EventEmitter) -> Tool:
         input_schema=GrepInput,
         output_schema=GrepOutput,
         run=run_grep,
-        emitter=emitter
+        emitter=emitter,
     )

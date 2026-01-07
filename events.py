@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Annotated, Literal, Protocol, Union
+
 from pydantic import Field
 
 
@@ -129,6 +130,4 @@ class EventEmitter:
         if self._confirmation_handler is None:
             # Default: always approve if no handler set
             return (True, None)
-        return self._confirmation_handler.request_confirmation(
-            tool_name, action, path, preview
-        )
+        return self._confirmation_handler.request_confirmation(tool_name, action, path, preview)

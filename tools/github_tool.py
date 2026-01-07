@@ -1,7 +1,9 @@
 import subprocess
+
 from pydantic import BaseModel
-from tools.tool import Tool
+
 from events import EventEmitter
+from tools.tool import Tool
 
 
 class CreatePullRequestInput(BaseModel):
@@ -18,7 +20,17 @@ class CreatePullRequestOutput(BaseModel):
 def create_pull_request(input: CreatePullRequestInput) -> CreatePullRequestOutput:
     # gh pr create --title <title> --body <description> --base <base>
     # if draft is true, add --draft
-    command = ["gh", "pr", "create", "--title", input.title, "--body", input.description, "--base", input.base]
+    command = [
+        "gh",
+        "pr",
+        "create",
+        "--title",
+        input.title,
+        "--body",
+        input.description,
+        "--base",
+        input.base,
+    ]
     if input.draft:
         command.append("--draft")
     subprocess.run(command)
@@ -38,5 +50,5 @@ def create_pull_request_tool(emitter: EventEmitter) -> Tool:
         input_schema=CreatePullRequestInput,
         output_schema=CreatePullRequestOutput,
         run=create_pull_request,
-        emitter=emitter
+        emitter=emitter,
     )
