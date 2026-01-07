@@ -1,10 +1,29 @@
-import anthropic
-from anthropic.types import ContentBlock, ContentBlockParam, MessageParam, ModelParam, ServerToolUseBlockParam, TextBlockParam, ThinkingBlockParam, ThinkingConfigDisabledParam, ThinkingConfigEnabledParam, ToolChoiceAutoParam, ToolChoiceToolParam, ToolResultBlockParam, ToolUseBlockParam, WebSearchResultBlockParam, WebSearchToolRequestErrorParam, WebSearchToolResultBlockParam
 import json
+
+import anthropic
+from anthropic.types import (
+    ContentBlock,
+    ContentBlockParam,
+    MessageParam,
+    ModelParam,
+    ServerToolUseBlockParam,
+    TextBlockParam,
+    ThinkingBlockParam,
+    ThinkingConfigDisabledParam,
+    ThinkingConfigEnabledParam,
+    ToolChoiceAutoParam,
+    ToolChoiceToolParam,
+    ToolResultBlockParam,
+    ToolUseBlockParam,
+    WebSearchResultBlockParam,
+    WebSearchToolRequestErrorParam,
+    WebSearchToolResultBlockParam,
+)
+
+from events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
 from settings import Settings
 from tools import Tool, ToolResult
 from tools.output_tool import create_output_tool
-from events import EventEmitter, AssistantMessageEvent, WebSearchErrorEvent, UnknownContentEvent
 
 # Tool name constant for text editor filtering
 TEXT_EDITOR_TOOL_NAME = "str_replace_based_edit_tool"
@@ -22,7 +41,7 @@ class Agent:
         tools: list[Tool] | None = None,
         thinking_enabled: bool = True,
         model: ModelParam = "claude-sonnet-4-5",
-        emitter: EventEmitter | None = None
+        emitter: EventEmitter | None = None,
     ):
         self.settings = settings
         self.model = model
@@ -49,7 +68,11 @@ class Agent:
                 content = msg.get("content", [])
                 if isinstance(content, list):
                     # Filter out thinking blocks (blocks are TypedDicts, not Block classes)
-                    filtered = [block for block in content if isinstance(block, dict) and block["type"] != "thinking"]
+                    filtered = [
+                        block
+                        for block in content
+                        if isinstance(block, dict) and block["type"] != "thinking"
+                    ]
                     if filtered:
                         messages.append(MessageParam(role="assistant", content=filtered))
                 else:
@@ -66,7 +89,9 @@ class Agent:
         elif self.tools:
             # filter out edit tool if edit mode is never
             if self.settings.edit_mode == "never":
-                actual_tools.extend([tool for tool in self.tools if tool.tool_name != TEXT_EDITOR_TOOL_NAME])
+                actual_tools.extend(
+                    [tool for tool in self.tools if tool.tool_name != TEXT_EDITOR_TOOL_NAME]
+                )
             else:
                 actual_tools.extend(self.tools)
             actual_tools.append(self.output_tool)  # may also call the output early
@@ -81,10 +106,16 @@ class Agent:
             max_tokens=10001,
             model=self.model,
             messages=messages,
-            thinking=ThinkingConfigEnabledParam(type="enabled", budget_tokens=10000) if use_thinking else ThinkingConfigDisabledParam(type="disabled"),
+            thinking=ThinkingConfigEnabledParam(type="enabled", budget_tokens=10000)
+            if use_thinking
+            else ThinkingConfigDisabledParam(type="disabled"),
             system=self.system_prompt if self.system_prompt else anthropic.omit,
-            tool_choice=ToolChoiceToolParam(name=self.output_tool.tool_name, type="tool") if require_output else ToolChoiceAutoParam(type="auto"),
-            tools=[tool.to_anthropic_tool() for tool in actual_tools] if actual_tools else anthropic.omit,
+            tool_choice=ToolChoiceToolParam(name=self.output_tool.tool_name, type="tool")
+            if require_output
+            else ToolChoiceAutoParam(type="auto"),
+            tools=[tool.to_anthropic_tool() for tool in actual_tools]
+            if actual_tools
+            else anthropic.omit,
         )
         return response.content
 
@@ -108,39 +139,48 @@ class Agent:
         for content in response:
             if content.type == "thinking":
                 assistant_content.append(
-                    ThinkingBlockParam(type="thinking", thinking=content.thinking, signature=content.signature)
+                    ThinkingBlockParam(
+                        type="thinking", thinking=content.thinking, signature=content.signature
+                    )
                 )
             elif content.type == "text":
                 self.emitter.emit(AssistantMessageEvent(text=content.text))
                 text_only_content.append(content.text)
-                assistant_content.append(
-                    TextBlockParam(type="text", text=content.text)
-                )
+                assistant_content.append(TextBlockParam(type="text", text=content.text))
             elif content.type == "tool_use":
                 assistant_content.append(
-                    ToolUseBlockParam(type="tool_use", id=content.id, name=content.name, input=content.input)
+                    ToolUseBlockParam(
+                        type="tool_use", id=content.id, name=content.name, input=content.input
+                    )
                 )
                 tool_calls.append((content.id, content.name, content.input))
             elif content.type == "server_tool_use":
                 assistant_content.append(
-                    ServerToolUseBlockParam(type="server_tool_use", id=content.id, name=content.name, input=content.input)
+                    ServerToolUseBlockParam(
+                        type="server_tool_use",
+                        id=content.id,
+                        name=content.name,
+                        input=content.input,
+                    )
                 )
             elif content.type == "web_search_tool_result":
                 if isinstance(content.content, list):
                     result_blocks: list[WebSearchResultBlockParam] = []
                     for result in content.content:
-                        result_blocks.append(WebSearchResultBlockParam(
-                            type="web_search_result",
-                            title=result.title,
-                            url=result.url,
-                            encrypted_content=result.encrypted_content,
-                            page_age=result.page_age
-                        ))
+                        result_blocks.append(
+                            WebSearchResultBlockParam(
+                                type="web_search_result",
+                                title=result.title,
+                                url=result.url,
+                                encrypted_content=result.encrypted_content,
+                                page_age=result.page_age,
+                            )
+                        )
                     assistant_content.append(
                         WebSearchToolResultBlockParam(
                             type="web_search_tool_result",
                             content=result_blocks,
-                            tool_use_id=content.tool_use_id
+                            tool_use_id=content.tool_use_id,
                         )
                     )
                 else:
@@ -151,8 +191,8 @@ class Agent:
                             tool_use_id=content.tool_use_id,
                             content=WebSearchToolRequestErrorParam(
                                 type="web_search_tool_result_error",
-                                error_code=content.content.error_code
-                            )
+                                error_code=content.content.error_code,
+                            ),
                         )
                     )
             else:
@@ -160,9 +200,7 @@ class Agent:
 
         # Add the assistant message with all content blocks
         if assistant_content:
-            self.history.append(
-                MessageParam(role="assistant", content=assistant_content)
-            )
+            self.history.append(MessageParam(role="assistant", content=assistant_content))
 
         # If there are no tool calls and only text content, treat as final response
         if not tool_calls and text_only_content:
@@ -180,7 +218,7 @@ class Agent:
                         type="tool_result",
                         tool_use_id=tool_id,
                         is_error=tool_result.is_error,
-                        content=json.dumps(result_dict)
+                        content=json.dumps(result_dict),
                     )
                 )
                 # Check if this is the output tool
@@ -188,9 +226,7 @@ class Agent:
                     output_result = tool_result.data.result
 
             # Add all tool results as a single user message
-            self.history.append(
-                MessageParam(role="user", content=tool_results)
-            )
+            self.history.append(MessageParam(role="user", content=tool_results))
 
         return output_result
 

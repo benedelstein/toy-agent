@@ -1,8 +1,9 @@
+from anthropic.types import ToolBash20250124Param, ToolUnionParam
 from pydantic import BaseModel
-from tools.tool import Tool, ToolResult
+
+from events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
 from tools.bash_session import BashSession
-from anthropic.types import ToolUnionParam, ToolBash20250124Param
-from events import EventEmitter, ToolStartedEvent, ToolCompletedEvent, ToolErrorEvent
+from tools.tool import Tool, ToolResult
 
 
 class BashInput(BaseModel):
@@ -27,14 +28,11 @@ class BashTool(Tool):
             input_schema=BashInput,  # not used
             output_schema=BashOutput,
             run=self._run_bash,
-            emitter=emitter
+            emitter=emitter,
         )
 
     def to_anthropic_tool(self) -> ToolUnionParam:
-        return ToolBash20250124Param(
-            name="bash",
-            type="bash_20250124"
-        )
+        return ToolBash20250124Param(name="bash", type="bash_20250124")
 
     def _run_bash(self, i: BashInput) -> BashOutput:
         if i.restart:
@@ -48,12 +46,12 @@ class BashTool(Tool):
             tool_name="bash",
             action="execute",
             path=None,
-            preview=f"Running bash command: {i.command}"
+            preview=f"Running bash command: {i.command}",
         )
         if not approved:
             return BashOutput(
                 is_error=True,
-                stderr=f"Command skipped: {i.command} - {reason or 'no reason given'}"
+                stderr=f"Command skipped: {i.command} - {reason or 'no reason given'}",
             )
 
         result = self.session.execute_command(i.command)
@@ -66,13 +64,16 @@ class BashTool(Tool):
             input_model = self.input_schema.model_validate(input)
             result = self._run_bash(input_model)
             if result.is_error:
-                self.emitter.emit(ToolErrorEvent(tool_name=self.tool_name, error=result.stderr or "Unknown error"))
+                self.emitter.emit(
+                    ToolErrorEvent(tool_name=self.tool_name, error=result.stderr or "Unknown error")
+                )
                 return ToolResult(success=False, error=result.stderr)
 
-            self.emitter.emit(ToolCompletedEvent(
-                tool_name=self.tool_name,
-                output=result.model_dump() if result else None
-            ))
+            self.emitter.emit(
+                ToolCompletedEvent(
+                    tool_name=self.tool_name, output=result.model_dump() if result else None
+                )
+            )
             return ToolResult(data=result)
         except Exception as e:
             self.emitter.emit(ToolErrorEvent(tool_name=self.tool_name, error=str(e)))

@@ -1,8 +1,9 @@
-import subprocess
-import queue
-import threading
 import os
+import queue
+import subprocess
+import threading
 import time
+
 
 class BashSession:
     def __init__(self):
@@ -10,33 +11,29 @@ class BashSession:
         self.output_queue = queue.Queue()
         self.error_queue = queue.Queue()
         self._start_readers()
-        
+
     def _create_process(self):
         self.process = subprocess.Popen(
-            ['/bin/bash'],
+            ["/bin/bash"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=0
+            bufsize=0,
         )
-    
+
     def _start_readers(self):
         # These threads READ from process pipes and WRITE to queues
         def pipe_to_queue(pipe, q):
-            for line in iter(pipe.readline, ''):
+            for line in iter(pipe.readline, ""):
                 q.put(line)
             pipe.close()
 
         self.output_thread = threading.Thread(
-            target=pipe_to_queue,
-            args=(self.process.stdout, self.output_queue),
-            daemon=True
+            target=pipe_to_queue, args=(self.process.stdout, self.output_queue), daemon=True
         )
         self.error_thread = threading.Thread(
-            target=pipe_to_queue,
-            args=(self.process.stderr, self.error_queue),
-            daemon=True
+            target=pipe_to_queue, args=(self.process.stderr, self.error_queue), daemon=True
         )
         self.output_thread.start()
         self.error_thread.start()
@@ -50,7 +47,7 @@ class BashSession:
                 lines.append(line)
             except queue.Empty:
                 break
-        return ''.join(lines)
+        return "".join(lines)
 
     def _read_error(self, timeout: float = 0.1) -> str:
         """Read from error queue (populated by background thread)"""
@@ -61,15 +58,15 @@ class BashSession:
                 lines.append(line)
             except queue.Empty:
                 break
-        return ''.join(lines)
-    
+        return "".join(lines)
+
     def restart(self):
         self.terminate()
         self.__init__()
-        
+
     def terminate(self):
         self.process.terminate()
-    
+
     def execute_command(self, command: str, timeout: float = 10) -> dict:
         if self.process.stdin is None:
             raise ValueError("Process stdin is not available")
@@ -93,12 +90,12 @@ class BashSession:
             except queue.Empty:
                 pass
 
-        stdout = ''.join(output_lines)
+        stdout = "".join(output_lines)
         stderr = self._read_error()
 
         return {"stdout": stdout, "stderr": stderr}
-    
-    
+
+
 if __name__ == "__main__":
     session = BashSession()
     while True:

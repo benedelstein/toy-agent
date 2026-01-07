@@ -1,11 +1,19 @@
 import os
 from typing import Annotated, Literal, Union
+
 from anthropic.types import ToolTextEditor20250728Param, ToolUnionParam
 from pydantic import BaseModel, Field, RootModel
-from settings import Settings, EditMode
+
+from events import (
+    EventEmitter,
+    FileViewedEvent,
+    ToolCompletedEvent,
+    ToolErrorEvent,
+    ToolStartedEvent,
+)
+from settings import EditMode, Settings
 from tools import ToolResult
 from tools.tool import Tool
-from events import EventEmitter, FileViewedEvent, ToolStartedEvent, ToolCompletedEvent, ToolErrorEvent
 
 
 class TextEditorViewCommand(BaseModel):
@@ -34,8 +42,13 @@ class TextEditorInsertCommand(BaseModel):
 
 
 TextEditorCommand = Annotated[
-    Union[TextEditorViewCommand, TextEditorStrReplaceCommand, TextEditorCreateCommand, TextEditorInsertCommand],
-    Field(discriminator="command")
+    Union[
+        TextEditorViewCommand,
+        TextEditorStrReplaceCommand,
+        TextEditorCreateCommand,
+        TextEditorInsertCommand,
+    ],
+    Field(discriminator="command"),
 ]
 
 
@@ -54,7 +67,9 @@ class TextEditorTool(Tool):
     max_characters: int | None
     settings: Settings
 
-    def __init__(self, emitter: EventEmitter, settings: Settings, max_characters: int | None = None):
+    def __init__(
+        self, emitter: EventEmitter, settings: Settings, max_characters: int | None = None
+    ):
         self.max_characters = max_characters
         self.settings = settings
         super().__init__(
@@ -63,7 +78,7 @@ class TextEditorTool(Tool):
             input_schema=TextEditorInput,  # defined by anthropic api
             output_schema=TextEditorOutput,
             run=self._run_text_editor,
-            emitter=emitter
+            emitter=emitter,
         )
 
     def _run_text_editor(self, input: TextEditorInput) -> TextEditorOutput:
@@ -110,14 +125,14 @@ class TextEditorTool(Tool):
         if count > 1:
             return f"WARNING: String appears {count} times in file (must be unique)"
         if count == 0:
-            return f"ERROR: String not found in file"
+            return "ERROR: String not found in file"
 
         # Find context around the match
         match_index = content.find(old_str)
 
         # Get surrounding lines for context
         lines_before = content[:match_index].splitlines()
-        lines_after = content[match_index + len(old_str):].splitlines()
+        lines_after = content[match_index + len(old_str) :].splitlines()
 
         # Show up to 3 lines of context before and after
         context_before = lines_before[-3:] if len(lines_before) > 3 else lines_before
@@ -125,9 +140,9 @@ class TextEditorTool(Tool):
 
         # Build the preview
         preview_lines = []
-        preview_lines.append("\n" + "="*60)
+        preview_lines.append("\n" + "=" * 60)
         preview_lines.append("PREVIEW OF CHANGES:")
-        preview_lines.append("="*60)
+        preview_lines.append("=" * 60)
 
         # Add context before
         for line in context_before:
@@ -147,7 +162,7 @@ class TextEditorTool(Tool):
         for line in context_after:
             preview_lines.append(f"  {line}")
 
-        preview_lines.append("="*60 + "\n")
+        preview_lines.append("=" * 60 + "\n")
 
         return "\n".join(preview_lines)
 
@@ -156,7 +171,9 @@ class TextEditorTool(Tool):
             content = file.read()
         count = content.count(cmd.old_str)
         if count > 1:
-            raise ValueError(f"String '{cmd.old_str}' appears multiple times in {cmd.path}. Make it more specific.")
+            raise ValueError(
+                f"String '{cmd.old_str}' appears multiple times in {cmd.path}. Make it more specific."
+            )
         if count == 0:
             raise ValueError(f"String '{cmd.old_str}' not found in {cmd.path}")
         new_content = content.replace(cmd.old_str, cmd.new_str, 1)
@@ -166,6 +183,7 @@ class TextEditorTool(Tool):
 
     def _validate_file(self, path: str, should_exist: bool = True) -> bool:
         from tools.utils import validate_path_within_project
+
         abs_path = validate_path_within_project(path)
 
         exists = os.path.exists(abs_path)
@@ -184,10 +202,7 @@ class TextEditorTool(Tool):
 
         # Use emitter for confirmation
         approved, reason = self.emitter.request_confirmation(
-            tool_name="str_replace_based_edit_tool",
-            action=command,
-            path=path,
-            preview=contents
+            tool_name="str_replace_based_edit_tool", action=command, path=path, preview=contents
         )
         if not approved:
             raise ValueError(f"Command '{command}' on file '{path}' skipped")
@@ -207,10 +222,11 @@ class TextEditorTool(Tool):
             input_model = self.input_schema.model_validate(input)
             result = self._run_text_editor(input_model)
 
-            self.emitter.emit(ToolCompletedEvent(
-                tool_name=self.tool_name,
-                output=result.model_dump() if result else None
-            ))
+            self.emitter.emit(
+                ToolCompletedEvent(
+                    tool_name=self.tool_name, output=result.model_dump() if result else None
+                )
+            )
             return ToolResult(data=result)
         except Exception as e:
             self.emitter.emit(ToolErrorEvent(tool_name=self.tool_name, error=str(e)))

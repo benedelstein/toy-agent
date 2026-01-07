@@ -1,8 +1,13 @@
-import sys
 import os
+import sys
+
 import anthropic
 import dotenv
+
 from agent import Agent
+from app_state import AppState
+from cli_handler import CLIConfirmationHandler, CLIEventHandler
+from events import EventEmitter, FinalOutputEvent
 from settings import SETTINGS, EditMode
 from tools import (
     create_bash_tool,
@@ -10,15 +15,12 @@ from tools import (
     create_grep_tool,
     create_ping_tool,
     create_read_file_tool,
-    create_text_editor_tool,
     create_sub_agent_tool,
+    create_text_editor_tool,
     create_write_todos_tool,
 )
 from tools.github_tool import create_pull_request_tool
 from tools.sub_agent_tool import agent_types
-from app_state import AppState
-from events import EventEmitter, FinalOutputEvent
-from cli_handler import CLIEventHandler, CLIConfirmationHandler
 
 dotenv.load_dotenv()
 
@@ -78,7 +80,7 @@ def create_agent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
             thinking_enabled=False,
             system_prompt=load_system_prompt(prompt_name="explore_agent"),
             model="claude-haiku-4-5",
-            emitter=agent_emitter
+            emitter=agent_emitter,
         )
     elif agent_type == "plan":
         return Agent(
@@ -93,7 +95,7 @@ def create_agent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
             thinking_enabled=True,
             system_prompt=load_system_prompt(prompt_name="plan_agent"),
             model="claude-sonnet-4-5",
-            emitter=agent_emitter
+            emitter=agent_emitter,
         )
 
 
@@ -115,7 +117,7 @@ if __name__ == "__main__":
         thinking_enabled=True,
         model="claude-opus-4-5",
         system_prompt=load_system_prompt(prompt_name="main_agent"),
-        emitter=emitter
+        emitter=emitter,
     )
     if len(sys.argv) > 1:
         prompt = sys.argv[1]

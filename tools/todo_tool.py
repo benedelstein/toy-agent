@@ -1,8 +1,9 @@
 from pydantic import BaseModel
+
 from app_state import AppState
-from tools.tool import Tool
-from todo import Todo
 from events import EventEmitter, TodosUpdatedEvent
+from todo import Todo
+from tools.tool import Tool
 
 
 class TodoToolInput(BaseModel):
@@ -28,7 +29,7 @@ class WriteTodosTool(Tool):
             input_schema=TodoToolInput,
             output_schema=TodoToolOutput,
             run=self._run_update_todos,
-            emitter=emitter
+            emitter=emitter,
         )
 
     def _run_update_todos(self, input: TodoToolInput) -> TodoToolOutput:
