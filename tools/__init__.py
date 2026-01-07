@@ -9,6 +9,7 @@ from tools.read_file_tool import ReadFileTool, create_read_file_tool
 from tools.text_editor_tool import TextEditorTool, create_text_editor_tool
 from tools.sub_agent_tool import SubAgentTool, create_sub_agent_tool
 from tools.todo_tool import WriteTodosTool, create_write_todos_tool
+from tools.edit_todo_tool import EditTodoTool, create_edit_todo_tool
 
 __all__ = [
     "Tool",
@@ -28,4 +29,6 @@ __all__ = [
     "create_text_editor_tool",
     "create_sub_agent_tool",
     "create_write_todos_tool",
+    "EditTodoTool",
+    "create_edit_todo_tool",
 ]
