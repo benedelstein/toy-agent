@@ -1,17 +1,23 @@
 [project]
 name = "toy-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "A simple agentic coding assistant powered by Claude"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.75.0",
-    "dotenv>=0.9.9",
+    "python-dotenv>=1.0.0",
+    "prompt-toolkit>=3.0.0",
     "rich>=14.2.0",
+    "watchdog>=6.0.0",
 ]
 
 [project.scripts]
-toy-agent = "main:main"
+toy-agent = "toy_agent.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [

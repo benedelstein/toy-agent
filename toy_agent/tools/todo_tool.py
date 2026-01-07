@@ -1,9 +1,9 @@
 from pydantic import BaseModel
 
-from app_state import AppState
-from events import EventEmitter, TodosUpdatedEvent
-from todo import Todo
-from tools.tool import Tool
+from ..app_state import AppState
+from ..events import EventEmitter, TodosUpdatedEvent
+from ..todo import Todo
+from .tool import Tool
 
 
 class TodoToolInput(BaseModel):

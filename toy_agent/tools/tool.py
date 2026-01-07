@@ -4,7 +4,7 @@ from typing import Callable, Generic, TypeVar, cast
 from anthropic.types import ToolParam, ToolUnionParam
 from pydantic import BaseModel
 
-from events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
+from ..events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
 
 InputType = TypeVar("InputType", bound=BaseModel)
 OutputType = TypeVar("OutputType", bound=BaseModel)

@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Callable, Literal
 from anthropic.types import ToolParam, ToolUnionParam
 from pydantic import BaseModel, Field
 
-from events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
-from tools.tool import Tool, ToolResult
+from ..events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
+from .tool import Tool, ToolResult
 
 if TYPE_CHECKING:
-    from agent import Agent
+    from ..agent import Agent
 
 agent_types = Literal["explore", "plan"]
 

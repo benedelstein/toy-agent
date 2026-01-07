@@ -1,9 +1,8 @@
-import os
-
 from pydantic import BaseModel, Field
 
-from events import EventEmitter, FileViewedEvent
-from tools.tool import Tool
+from ..events import EventEmitter, FileViewedEvent
+from .tool import Tool
+from .utils import validate_path_within_project, read_file_with_line_numbers
 
 
 class ReadFileInput(BaseModel):
@@ -35,39 +34,18 @@ class ReadFileTool(Tool):
         )
 
     def _run_read_file(self, input: ReadFileInput) -> ReadFileOutput:
-        from tools.utils import validate_path_within_project
-
-        path = validate_path_within_project(input.path)
+        abs_path = validate_path_within_project(input.path)
 
         # Emit file viewed event
-        self.emitter.emit(FileViewedEvent(path=path))
+        self.emitter.emit(FileViewedEvent(path=input.path))
 
-        if not os.path.exists(path):
-            raise ValueError(f"File {path} does not exist")
-
-        with open(path, "r") as file:
-            lines = file.readlines()
-
-        # If no line range specified, return entire file
-        if input.start_line is None and input.end_line is None:
-            return ReadFileOutput(contents="".join(lines))
-
-        # Convert to 0-indexed, default start to 1 if not provided
-        start_idx = (input.start_line or 1) - 1
-        end_idx = input.end_line if input.end_line is not None else len(lines)
-
-        # Validate line range
-        if start_idx < 0:
-            raise ValueError(f"start_line must be >= 1, got {input.start_line}")
-        if end_idx > len(lines):
-            end_idx = len(lines)
-        if start_idx >= len(lines):
-            raise ValueError(f"start_line {input.start_line} is beyond end of file ({len(lines)} lines)")
-        if start_idx >= end_idx:
-            raise ValueError(f"end_line ({input.end_line}) must be >= start_line ({input.start_line})")
-
-        selected_lines = lines[start_idx:end_idx]
-        return ReadFileOutput(contents="".join(selected_lines))
+        result = read_file_with_line_numbers(
+            path=abs_path,
+            start_line=input.start_line,
+            end_line=input.end_line,
+            include_line_numbers=False,  # read_file returns raw content without line numbers
+        )
+        return ReadFileOutput(contents=result.content)
 
 
 def create_read_file_tool(emitter: EventEmitter) -> ReadFileTool:

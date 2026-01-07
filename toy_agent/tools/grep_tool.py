@@ -3,8 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from events import EventEmitter
-from tools.tool import Tool
+from ..events import EventEmitter
+from .tool import Tool
 
 
 class GrepInput(BaseModel):
@@ -18,7 +18,7 @@ class GrepOutput(BaseModel):
 
 
 def run_grep(input: GrepInput) -> GrepOutput:
-    from tools.utils import validate_path_within_project
+    from .utils import validate_path_within_project
 
     absolute_path = validate_path_within_project(input.file)
     cmd = ["grep"] + input.flags + [input.pattern, absolute_path]

@@ -1,7 +1,15 @@
 - [x] Github tool - gh cli? maybe need multiple tools, 1 for each action.
-- [ ] CLI formatting or better UI
+- [x] CLI formatting or better UI
+- [ ] Ask user question tool
+- [ ] Show interactive diffs
+- [ ] Image uploads
+- [ ] loading state
+- [ ] Better represent bash tool call output
+- [ ] Store and resume session state.
 - [ ] Stream responses
 - [ ] Interrupt responses
+- [ ] CLI: keyboard shortcuts to toggle modes, run commands, interrupt, etc.
 - [ ] Optimize Prompts
-- [ ] Tool search
+- [ ] Tool search tool
+- [ ] Web search tool
 - [ ] Deploy as background agent with sandbox vm? End to end: issue -> code -> verify -> pr 

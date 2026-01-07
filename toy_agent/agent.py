@@ -20,13 +20,18 @@ from anthropic.types import (
     WebSearchToolResultBlockParam,
 )
 
-from events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
-from settings import Settings
-from tools import Tool, ToolResult
-from tools.output_tool import create_output_tool
+from .events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
+from .settings import Settings
+from .tools import Tool, ToolResult
+from .tools.output_tool import create_output_tool
 
 # Tool name constant for text editor filtering
 TEXT_EDITOR_TOOL_NAME = "str_replace_based_edit_tool"
+
+
+class AgentInterrupted(Exception):
+    """Raised when the agent loop is interrupted by the user."""
+    pass
 
 
 class Agent:
@@ -52,6 +57,7 @@ class Agent:
         self.thinking_enabled = thinking_enabled
         self.tool_dict: dict[str, Tool] = {tool.tool_name: tool for tool in tools} if tools else {}
         self.emitter = emitter or EventEmitter()
+        self._interrupted = False
 
         # Create output tool with this agent's emitter
         self.output_tool = create_output_tool(self.emitter)
@@ -213,34 +219,46 @@ class Agent:
             for tool_id, tool_name, tool_input in tool_calls:
                 tool_result = self._handle_tool_call(tool_name, tool_input)
                 result_dict = tool_result.to_dict()
+
+                # Always add tool result to maintain valid conversation state
+                tool_results.append(
+                    ToolResultBlockParam(
+                        type="tool_result",
+                        tool_use_id=tool_id,
+                        is_error=tool_result.is_error,
+                        content=json.dumps(result_dict)
+                    )
+                )
+
                 # Check if this is the output tool
                 if tool_name == "output" and tool_result.data:
                     output_result = tool_result.data.result
-                else:
-                    # Tool errors are now emitted by Tool.execute() via the event system
-                    tool_results.append(
-                        ToolResultBlockParam(
-                            type="tool_result",
-                            tool_use_id=tool_id,
-                            is_error=tool_result.is_error,
-                            content=json.dumps(result_dict),
-                        )
-                    )
 
             # Add all tool results as a single user message
             self.history.append(MessageParam(role="user", content=tool_results))
 
         return output_result
 
+    def interrupt(self):
+        """Signal the agent to stop at the next opportunity."""
+        self._interrupted = True
+
     def run(self, prompt: str, max_iterations: int | None = 10) -> str:
         iteration = 0
+        self._interrupted = False
         self.history.append(MessageParam(role="user", content=prompt))
         while max_iterations is None or iteration < max_iterations:
+            if self._interrupted:
+                self._interrupted = False
+                raise AgentInterrupted("Agent interrupted by user")
             iteration += 1
-            result = self._handle_iteration(require_output=iteration == max_iterations)
+            try:
+                result = self._handle_iteration(require_output=iteration == max_iterations)
+            except KeyboardInterrupt:
+                raise AgentInterrupted("Agent interrupted by user")
             if result is not None:
                 return result
         raise Exception("Error: max iterations reached")
-
+    
     def reset(self):
         self.__init__(settings=self.settings, client=self.client, emitter=self.emitter)

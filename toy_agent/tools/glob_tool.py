@@ -3,8 +3,9 @@ import os
 
 from pydantic import BaseModel, Field
 
-from events import EventEmitter
-from tools.tool import Tool
+from ..events import EventEmitter
+from .tool import Tool
+from .utils import get_project_root, is_path_within_project
 
 
 class GlobInput(BaseModel):
@@ -30,8 +31,6 @@ def run_glob(input: GlobInput) -> GlobOutput:
     - [seq] matches any character in seq
     - ** matches directories recursively (when recursive=True)
     """
-    from tools.utils import get_project_root, is_path_within_project
-
     # Change to project root for consistent behavior
     project_root = get_project_root()
     original_dir = os.getcwd()
