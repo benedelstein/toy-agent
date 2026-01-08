@@ -4,6 +4,13 @@
 
 This is **Toy-Agent**, a simple but powerful agentic coding assistant framework built on the Anthropic API. It implements an agentic loop where Claude iteratively uses tools to complete tasks. Your role as an LLM working in this codebase is to help improve, extend, or debug this framework.
 
+IMPORTANT: This project uses uv. Always use uv instead of pip pipx or `python main.py` etc
+```bash
+uv sync
+uv run ruff check .
+uv run toy_agent/main.py
+```
+
 ## Core Architecture
 
 ### The Agent Loop (agent.py)
