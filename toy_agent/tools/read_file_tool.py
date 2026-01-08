@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 from ..events import EventEmitter, FileViewedEvent
 from .tool import Tool
-from .utils import validate_path_within_project, read_file_with_line_numbers
+from .utils import read_file_with_line_numbers, validate_path_within_project
 
 
 class ReadFileInput(BaseModel):
@@ -24,7 +24,7 @@ class ReadFileTool(Tool):
             Call like so {{'path': 'path/to/file'}}
             Optionally specify start_line and end_line (1-indexed, inclusive) to read a specific range:
             {{'path': 'path/to/file', 'start_line': 10, 'end_line': 25}}
-            
+
             Do not use this to view directories. It can only view individual files.
             """,
             input_schema=ReadFileInput,
