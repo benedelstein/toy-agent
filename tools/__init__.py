@@ -9,6 +9,11 @@ from tools.sub_agent_tool import SubAgentTool, create_sub_agent_tool
 from tools.text_editor_tool import TextEditorTool, create_text_editor_tool
 from tools.todo_tool import WriteTodosTool, create_write_todos_tool
 from tools.tool import Tool, ToolResult
+from tools.tool_search_tool import (
+    ToolSearchTool,
+    create_tool_search_bm25_tool,
+    create_tool_search_regex_tool,
+)
 
 __all__ = [
     "Tool",
@@ -19,6 +24,7 @@ __all__ = [
     "TextEditorTool",
     "SubAgentTool",
     "WriteTodosTool",
+    "ToolSearchTool",
     "create_bash_tool",
     "create_glob_tool",
     "create_grep_tool",
@@ -28,4 +34,6 @@ __all__ = [
     "create_text_editor_tool",
     "create_sub_agent_tool",
     "create_write_todos_tool",
+    "create_tool_search_regex_tool",
+    "create_tool_search_bm25_tool",
 ]

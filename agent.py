@@ -19,6 +19,9 @@ from anthropic.types import (
     WebSearchToolRequestErrorParam,
     WebSearchToolResultBlockParam,
 )
+from anthropic.types.beta.tool_search_tool_result_block_param import (
+    ToolSearchToolResultBlockParam,
+)
 
 from events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
 from settings import Settings
@@ -102,7 +105,7 @@ class Agent:
         use_thinking = self.thinking_enabled and not require_output
         messages = self._get_messages_for_api(use_thinking)
 
-        response = self.client.messages.create(
+        response = self.client.beta.messages.create(
             max_tokens=10001,
             model=self.model,
             messages=messages,
@@ -116,6 +119,7 @@ class Agent:
             tools=[tool.to_anthropic_tool() for tool in actual_tools]
             if actual_tools
             else anthropic.omit,
+            betas=["advanced-tool-use-2025-11-20"],
         )
         return response.content
 
@@ -155,6 +159,7 @@ class Agent:
                 )
                 tool_calls.append((content.id, content.name, content.input))
             elif content.type == "server_tool_use":
+                # Handles server-side tools including tool_search_tool_regex and tool_search_tool_bm25
                 assistant_content.append(
                     ServerToolUseBlockParam(
                         type="server_tool_use",
@@ -195,6 +200,15 @@ class Agent:
                             ),
                         )
                     )
+            elif content.type == "tool_search_tool_result":
+                # Handle tool search results - these contain matched tools
+                assistant_content.append(
+                    ToolSearchToolResultBlockParam(
+                        type="tool_search_tool_result",
+                        tool_use_id=content.tool_use_id,
+                        content=content.content,
+                    )
+                )
             else:
                 self.emitter.emit(UnknownContentEvent(content_type=content.type))
 
