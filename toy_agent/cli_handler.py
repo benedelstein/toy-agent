@@ -148,7 +148,9 @@ class CLIEventHandler(EventHandler):
 
             case ToolStartedEvent(tool_name=name, input=input):
                 if self.verbose:
-                    self.console.print(f"🛠️ [bold blue]Using {name}...[/bold blue]: {str(input)[0:100]}")
+                    self.console.print(
+                        f"🛠️ [bold blue]Using {name}...[/bold blue]: {str(input)[0:100]}"
+                    )
 
             case ToolCompletedEvent(tool_name=name):
                 if self.verbose:
@@ -168,13 +170,17 @@ class CLIConfirmationHandler(ConfirmationHandler):
 
         # Display the preview
         if path:
-            self.console.print(f"🛠️ Confirming command '[bold blue]{action}[/bold blue]' on file '[bold blue]{path}[/bold blue]'")
+            self.console.print(
+                f"🛠️ Confirming command '[bold blue]{action}[/bold blue]' on file '[bold blue]{path}[/bold blue]'"
+            )
         else:
             self.console.print(f"🛠️ [bold blue]Confirming:[/bold blue] {action}")
         self.console.print(preview)
 
         # Get user input
-        answer = self.console.input("[bold]🛠️ Press Enter to continue or 'q <reason>' to skip > [/bold]")
+        answer = self.console.input(
+            "[bold]🛠️ Press Enter to continue or 'q <reason>' to skip > [/bold]"
+        )
 
         if answer.strip().lower().startswith("q"):
             reason = answer.strip()[1:].strip() or "no reason given"
@@ -195,16 +201,18 @@ class CLIInputHandler(InputHandler):
         self.completer = SlashCommandCompleter(SLASH_COMMANDS)
 
         # Claude Code-inspired style theme
-        self.pt_style = PTStyle.from_dict({
-            'prompt': '#e5c07b bold',  # Orange/yellow chevron
-            'bottom-toolbar': 'bg:#2d2d44 #666666',
-            'bottom-toolbar.key': '#61afef bold',  # Blue for shortcuts
-            'completion-menu': 'bg:#1e1e2e #cdd6f4',
-            'completion-menu.completion': 'bg:#1e1e2e #cdd6f4',
-            'completion-menu.completion.current': 'bg:#45475a #ffffff',
-            'completion-menu.meta': 'bg:#1e1e2e #888888 italic',
-            'completion-menu.meta.completion.current': 'bg:#45475a #aaaaaa italic',
-        })
+        self.pt_style = PTStyle.from_dict(
+            {
+                "prompt": "#e5c07b bold",  # Orange/yellow chevron
+                "bottom-toolbar": "bg:#2d2d44 #666666",
+                "bottom-toolbar.key": "#61afef bold",  # Blue for shortcuts
+                "completion-menu": "bg:#1e1e2e #cdd6f4",
+                "completion-menu.completion": "bg:#1e1e2e #cdd6f4",
+                "completion-menu.completion.current": "bg:#45475a #ffffff",
+                "completion-menu.meta": "bg:#1e1e2e #888888 italic",
+                "completion-menu.meta.completion.current": "bg:#45475a #aaaaaa italic",
+            }
+        )
 
         # Create persistent session for better UX
         self.session = PromptSession(
@@ -215,11 +223,7 @@ class CLIInputHandler(InputHandler):
 
     def _get_toolbar(self) -> HTML:
         """Generate bottom toolbar with keyboard hints."""
-        return HTML(
-            '<b>Ctrl+C</b> interrupt  │  '
-            '<b>/help</b> commands  │  '
-            '<b>Ctrl+D</b> exit'
-        )
+        return HTML("<b>Ctrl+C</b> interrupt  │  <b>/help</b> commands  │  <b>Ctrl+D</b> exit")
 
     def _print_context_bar(self) -> None:
         """Print context bar above the prompt using Rich."""
@@ -246,7 +250,7 @@ class CLIInputHandler(InputHandler):
         # Use prompt_toolkit PromptSession for input with autocomplete
         try:
             user_input = self.session.prompt(
-                [('class:prompt', f'{self.prompt_prefix} ')],
+                [("class:prompt", f"{self.prompt_prefix} ")],
                 bottom_toolbar=self._get_toolbar,
             )
         except (EOFError, KeyboardInterrupt):

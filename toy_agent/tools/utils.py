@@ -2,7 +2,8 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
-MARKER_FILES = ['.git', 'pyproject.toml', 'setup.py', 'setup.cfg']
+MARKER_FILES = [".git", "pyproject.toml", "setup.py", "setup.cfg"]
+
 
 @lru_cache(maxsize=1)
 def get_project_root() -> str:
@@ -36,10 +37,11 @@ def validate_path_within_project(path: str) -> str:
 @dataclass
 class FileViewResult:
     """Result of viewing a file with optional line range."""
+
     content: str
     total_lines: int
     start_line: int  # 1-indexed
-    end_line: int    # 1-indexed, inclusive
+    end_line: int  # 1-indexed, inclusive
 
 
 def read_file_with_line_numbers(
@@ -92,12 +94,16 @@ def read_file_with_line_numbers(
     if start_idx < 0:
         raise ValueError(f"start_line must be >= 1, got {actual_start_line}")
     if start_idx >= total_lines and total_lines > 0:
-        raise ValueError(f"start_line {actual_start_line} is beyond end of file ({total_lines} lines)")
+        raise ValueError(
+            f"start_line {actual_start_line} is beyond end of file ({total_lines} lines)"
+        )
     if end_idx > total_lines:
         end_idx = total_lines
         actual_end_line = total_lines
     if start_idx >= end_idx and total_lines > 0:
-        raise ValueError(f"end_line ({actual_end_line}) must be >= start_line ({actual_start_line})")
+        raise ValueError(
+            f"end_line ({actual_end_line}) must be >= start_line ({actual_start_line})"
+        )
 
     selected_lines = lines[start_idx:end_idx]
 
@@ -111,7 +117,7 @@ def read_file_with_line_numbers(
         for i, line in enumerate(selected_lines):
             line_num = actual_start_line + i
             # Remove trailing newline, add it back after formatting
-            line_content = line.rstrip('\n')
+            line_content = line.rstrip("\n")
             numbered_lines.append(f"{line_num:>{padding}}  {line_content}\n")
 
         content = "".join(numbered_lines)

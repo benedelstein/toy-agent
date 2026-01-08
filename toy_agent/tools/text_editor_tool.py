@@ -222,7 +222,7 @@ class TextEditorTool(Tool):
         """List files and directories up to max_depth levels deep, ignoring hidden items and node_modules."""
         abs_path = validate_path_within_project(path)
 
-        IGNORED_NAMES = {'node_modules', '__pycache__', '.git', '.venv', 'venv', '.env'}
+        IGNORED_NAMES = {"node_modules", "__pycache__", ".git", ".venv", "venv", ".env"}
 
         lines = []
 
@@ -236,7 +236,7 @@ class TextEditorTool(Tool):
                 return
 
             # Filter out hidden files and ignored directories
-            entries = [e for e in entries if not e.startswith('.') and e not in IGNORED_NAMES]
+            entries = [e for e in entries if not e.startswith(".") and e not in IGNORED_NAMES]
 
             dirs = []
             files = []
@@ -258,11 +258,7 @@ class TextEditorTool(Tool):
                     lines.append(f"{prefix}{connector}{entry}/")
                     # Recurse into directory
                     extension = "    " if is_last else "│   "
-                    walk_directory(
-                        os.path.join(current_path, entry),
-                        prefix + extension,
-                        depth + 1
-                    )
+                    walk_directory(os.path.join(current_path, entry), prefix + extension, depth + 1)
                 else:
                     lines.append(f"{prefix}{connector}{entry}")
 
@@ -287,7 +283,9 @@ class TextEditorTool(Tool):
             tool_name="str_replace_based_edit_tool", action=command, path=path, preview=contents
         )
         if not approved:
-            raise ValueError(f"Command '{command}' on file '{path}' skipped - user-provided reason: {reason or 'no reason given'}")
+            raise ValueError(
+                f"Command '{command}' on file '{path}' skipped - user-provided reason: {reason or 'no reason given'}"
+            )
         return True
 
     def to_anthropic_tool(self) -> ToolUnionParam:

@@ -31,6 +31,7 @@ TEXT_EDITOR_TOOL_NAME = "str_replace_based_edit_tool"
 
 class AgentInterrupted(Exception):
     """Raised when the agent loop is interrupted by the user."""
+
     pass
 
 
@@ -230,7 +231,7 @@ class Agent:
                         type="tool_result",
                         tool_use_id=tool_id,
                         is_error=tool_result.is_error,
-                        content=json.dumps(result_dict)
+                        content=json.dumps(result_dict),
                     )
                 )
 

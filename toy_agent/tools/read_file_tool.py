@@ -7,8 +7,14 @@ from .utils import read_file_with_line_numbers, validate_path_within_project
 
 class ReadFileInput(BaseModel):
     path: str
-    start_line: int | None = Field(None, description="The 1-indexed line number to start reading from. If not provided, read from the beginning.")
-    end_line: int | None = Field(None, description="The 1-indexed line number to stop reading at (inclusive). If not provided, read to the end of the file.")
+    start_line: int | None = Field(
+        None,
+        description="The 1-indexed line number to start reading from. If not provided, read from the beginning.",
+    )
+    end_line: int | None = Field(
+        None,
+        description="The 1-indexed line number to stop reading at (inclusive). If not provided, read to the end of the file.",
+    )
 
 
 class ReadFileOutput(BaseModel):

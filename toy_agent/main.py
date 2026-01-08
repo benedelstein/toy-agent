@@ -35,12 +35,14 @@ emitter = EventEmitter()
 emitter.add_handler(CLIEventHandler(verbose=False))
 emitter.set_confirmation_handler(CLIConfirmationHandler())
 
+
 def get_status_info():
     """Return current status info for the input bar"""
     return {
         "edit": SETTINGS.edit_mode.value,
         "cwd": Path.cwd().name,
     }
+
 
 emitter.set_input_handler(CLIInputHandler(prompt_prefix="❯", get_status_info=get_status_info))
 
@@ -82,7 +84,9 @@ def handle_prompt(prompt: str, agent: Agent) -> str | None:
         result = commands.execute(ctx)
 
         if result is None:
-            console.print(f"[red]Unknown command: {ctx.args[0]}[/red]. Type /help for available commands.")
+            console.print(
+                f"[red]Unknown command: {ctx.args[0]}[/red]. Type /help for available commands."
+            )
             return None
 
         match result:
@@ -101,6 +105,7 @@ def handle_prompt(prompt: str, agent: Agent) -> str | None:
             status.stop()
             console.print("[yellow]Interrupted - returning to prompt[/yellow]")
             return None
+
 
 def create_agent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
     if agent_type == "explore":
@@ -178,6 +183,7 @@ def main():
         emitter.emit(FinalOutputEvent(result=result))
 
     import time
+
     last_interrupt_time: float | None = None
     interrupt_debounce = 1.0  # seconds
 
@@ -193,7 +199,10 @@ def main():
                 print()  # Add newline after output # TODO: REMOVE
             except KeyboardInterrupt:
                 now = time.time()
-                if last_interrupt_time is not None and (now - last_interrupt_time) <= interrupt_debounce:
+                if (
+                    last_interrupt_time is not None
+                    and (now - last_interrupt_time) <= interrupt_debounce
+                ):
                     # Second Ctrl+C within debounce - exit
                     raise
                 last_interrupt_time = now

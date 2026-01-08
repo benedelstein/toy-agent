@@ -1,4 +1,5 @@
 """File watcher for IDE integration - monitors file access and modifications."""
+
 import threading
 from pathlib import Path
 from typing import Callable, Set
@@ -19,7 +20,11 @@ class FileEventHandler(FileSystemEventHandler):
         """Handle file open events (macOS/Linux with appropriate tools)."""
         if not event.is_directory:
             # Ensure src_path is a string
-            src_path = event.src_path.decode('utf-8') if isinstance(event.src_path, bytes) else event.src_path
+            src_path = (
+                event.src_path.decode("utf-8")
+                if isinstance(event.src_path, bytes)
+                else event.src_path
+            )
             rel_path = Path(src_path).relative_to(self.project_root)
             print(f"File opened: {rel_path}")
             self.callback("opened", str(rel_path))
@@ -27,9 +32,11 @@ class FileEventHandler(FileSystemEventHandler):
     def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification events."""
         # Ensure src_path is a string
-        src_path = event.src_path.decode('utf-8') if isinstance(event.src_path, bytes) else event.src_path
+        src_path = (
+            event.src_path.decode("utf-8") if isinstance(event.src_path, bytes) else event.src_path
+        )
 
-        if not event.is_directory and src_path.endswith(('.py', '.md', '.txt', '.json')):
+        if not event.is_directory and src_path.endswith((".py", ".md", ".txt", ".json")):
             rel_path = Path(src_path).relative_to(self.project_root)
             # Debounce multiple modify events
             if str(rel_path) not in self.recently_viewed:
@@ -66,5 +73,5 @@ def inject_file_event(event_type: str, file_path: str, agent):
 
     # Add to agent's message history as a system notification
     # This would need to be implemented in your Agent class
-    if hasattr(agent, 'inject_system_message'):
+    if hasattr(agent, "inject_system_message"):
         agent.inject_system_message(system_msg)
