@@ -54,8 +54,9 @@ def load_system_prompt(prompt_name: str) -> str:
     """Load system prompt with agents.md context if available."""
     base_prompt = load_prompt_file(prompt_name)
 
-    # TODO: may want to search from git repo root instead
-    agents_md_path = os.path.join(os.path.dirname(__file__), "agents.md")
+    # Look for agents.md in the project root (one level up from this file's directory)
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    agents_md_path = os.path.join(project_root, "agents.md")
     if os.path.exists(agents_md_path):
         with open(agents_md_path, "r") as f:
             agents_context = f.read()
