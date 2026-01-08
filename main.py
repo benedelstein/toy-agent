@@ -6,7 +6,7 @@ import dotenv
 
 from agent import Agent
 from app_state import AppState
-from cli_handler import CLIConfirmationHandler, CLIEventHandler
+from cli_handler import SLASH_COMMANDS, CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
 from events import EventEmitter, FinalOutputEvent
 from settings import SETTINGS, EditMode
 from tools import (
@@ -54,15 +54,64 @@ def load_system_prompt(prompt_name: str) -> str:
     return base_prompt
 
 
-def handle_prompt(prompt: str, agent: Agent) -> str:
+def get_status_info() -> dict[str, str]:
+    """Return status info for the context bar."""
+    return {
+        "edit": SETTINGS.edit_mode.value,
+        "cwd": os.path.basename(os.getcwd()),
+    }
+
+
+def print_help() -> None:
+    """Print available slash commands."""
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title="Available Commands", show_header=True, header_style="bold cyan")
+    table.add_column("Command", style="yellow")
+    table.add_column("Description")
+
+    def add_commands(commands: list, prefix: str = "") -> None:
+        for cmd in commands:
+            full_name = f"/{prefix}{cmd.name}" if prefix else f"/{cmd.name}"
+            table.add_row(full_name, cmd.description)
+            if cmd.subcommands:
+                add_commands(cmd.subcommands, f"{prefix}{cmd.name} ")
+
+    add_commands(SLASH_COMMANDS)
+    console.print(table)
+
+
+def handle_prompt(prompt: str, agent: Agent) -> str | None:
+    """Handle user input, returning None for handled slash commands."""
     if prompt.startswith("/"):
-        command = prompt.split(" ")[0]
+        parts = prompt.split()
+        command = parts[0]
+
+        if command == "/help":
+            print_help()
+            return None
+
+        if command == "/exit":
+            print("Goodbye!")
+            sys.exit(0)
+
+        if command == "/clear":
+            agent.clear_history()
+            return "Conversation cleared."
+
         if command == "/settings":
-            settings = prompt.split(" ")[1]
-            if settings == "edit_mode":
-                edit_mode = prompt.split(" ")[2]
-                SETTINGS.edit_mode = EditMode(edit_mode)
-                return "Edit mode set to " + edit_mode
+            if len(parts) >= 3 and parts[1] == "edit_mode":
+                try:
+                    SETTINGS.edit_mode = EditMode(parts[2])
+                    return f"Edit mode set to {parts[2]}"
+                except ValueError:
+                    return f"Invalid edit mode: {parts[2]}. Use: ask, always, or never"
+            return "Usage: /settings edit_mode <ask|always|never>"
+
+        return f"Unknown command: {command}. Type /help for available commands."
+
     return agent.run(prompt=prompt, max_iterations=None)
 
 
@@ -123,10 +172,22 @@ if __name__ == "__main__":
         prompt = sys.argv[1]
         result = agent.run(prompt=prompt, max_iterations=None)
         emitter.emit(FinalOutputEvent(result=result))
-    else:
-        pass
+
+    # Create styled input handler
+    input_handler = CLIInputHandler(get_status_info=get_status_info)
+
     while True:
-        prompt = input("> ")
-        result = handle_prompt(prompt, agent)
-        emitter.emit(FinalOutputEvent(result=result))
-        print()  # Add newline after output
+        try:
+            prompt = input_handler.request_input()
+            if not prompt.strip():
+                continue
+            result = handle_prompt(prompt, agent)
+            if result is not None:
+                emitter.emit(FinalOutputEvent(result=result))
+            print()  # Add newline after output
+        except KeyboardInterrupt:
+            print("\nInterrupted. Press Ctrl+D to exit.")
+            continue
+        except EOFError:
+            print("\nGoodbye!")
+            break

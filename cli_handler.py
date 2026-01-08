@@ -1,3 +1,15 @@
+from collections.abc import Generator
+from dataclasses import dataclass, field
+from typing import Callable
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.document import Document
+from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.styles import Style as PTStyle
+from rich.console import Console
+from rich.text import Text
+
 from events import (
     AssistantMessageEvent,
     ConfirmationHandler,
@@ -81,3 +93,179 @@ class CLIConfirmationHandler(ConfirmationHandler):
             return (False, reason)
 
         return (True, None)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Slash Command Infrastructure
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class SlashCommand:
+    """Represents a slash command with optional subcommands."""
+
+    name: str
+    description: str
+    subcommands: list["SlashCommand"] = field(default_factory=list)
+
+
+SLASH_COMMANDS: list[SlashCommand] = [
+    SlashCommand(name="help", description="Show available commands"),
+    SlashCommand(
+        name="settings",
+        description="Configure settings",
+        subcommands=[
+            SlashCommand(
+                name="edit_mode",
+                description="Set edit mode",
+                subcommands=[
+                    SlashCommand(name="ask", description="Ask before edits"),
+                    SlashCommand(name="always", description="Always allow edits"),
+                    SlashCommand(name="never", description="Never allow edits"),
+                ],
+            ),
+        ],
+    ),
+    SlashCommand(name="clear", description="Clear conversation history"),
+    SlashCommand(name="exit", description="Exit the CLI"),
+]
+
+
+class SlashCommandCompleter(Completer):
+    """Autocomplete for slash commands."""
+
+    def __init__(self, commands: list[SlashCommand]):
+        self.commands = commands
+
+    def get_completions(
+        self, document: Document, complete_event: object
+    ) -> Generator[Completion, None, None]:
+        text = document.text_before_cursor
+
+        # Only complete if starts with /
+        if not text.startswith("/"):
+            return
+
+        parts = text[1:].split(" ")
+
+        # Find which commands to show based on current input
+        current_commands = self.commands
+
+        # Navigate through command hierarchy
+        for part in parts[:-1]:
+            for cmd in current_commands:
+                if cmd.name == part:
+                    current_commands = cmd.subcommands
+                    break
+            else:
+                return  # No matching command found
+
+        # Get the partial text being typed
+        partial = parts[-1] if parts else ""
+
+        # Yield matching completions
+        for cmd in current_commands:
+            if cmd.name.startswith(partial):
+                yield Completion(
+                    cmd.name,
+                    start_position=-len(partial),
+                    display=cmd.name,
+                    display_meta=cmd.description,
+                )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Styled CLI Input Handler
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class CLIInputHandler:
+    """Styled input handler with Claude Code-like appearance."""
+
+    def __init__(self, get_status_info: Callable[[], dict[str, str]] | None = None):
+        """
+        Initialize the input handler.
+
+        Args:
+            get_status_info: Optional callback that returns status info dict
+                           (e.g., {"edit": "ask", "cwd": "toy-agent"})
+        """
+        self.get_status_info = get_status_info
+        self.console = Console()
+        self.completer = SlashCommandCompleter(SLASH_COMMANDS)
+
+        # prompt_toolkit style
+        self.pt_style = PTStyle.from_dict(
+            {
+                "prompt": "#e5c07b bold",  # Orange/yellow chevron
+                "bottom-toolbar": "bg:#2d2d44 #888888",
+                "bottom-toolbar.key": "#61afef bold",
+                "completion-menu": "bg:#1e1e2e #cdd6f4",
+                "completion-menu.completion": "bg:#1e1e2e #cdd6f4",
+                "completion-menu.completion.current": "bg:#45475a #ffffff",
+                "completion-menu.meta": "#888888 italic",
+                "completion-menu.meta.current": "#aaaaaa italic",
+            }
+        )
+
+        self.session = PromptSession(
+            completer=self.completer,
+            style=self.pt_style,
+            complete_while_typing=True,
+        )
+
+    def _get_bottom_toolbar(self) -> FormattedText:
+        """Generate the bottom toolbar content."""
+        return FormattedText(
+            [
+                ("class:bottom-toolbar.key", " Ctrl+C "),
+                ("class:bottom-toolbar", "interrupt  "),
+                ("class:bottom-toolbar.key", "/help "),
+                ("class:bottom-toolbar", "commands  "),
+                ("class:bottom-toolbar.key", "Ctrl+D "),
+                ("class:bottom-toolbar", "exit "),
+            ]
+        )
+
+    def _print_context_bar(self) -> None:
+        """Print the context bar above the prompt using Rich."""
+        if not self.get_status_info:
+            return
+
+        status = self.get_status_info()
+        if not status:
+            return
+
+        # Build styled text
+        parts = []
+        for key, value in status.items():
+            if parts:
+                parts.append(("dim", " │ "))
+            parts.append(("dim", f"{key}: "))
+            parts.append(("cyan", value))
+
+        text = Text()
+        for style, content in parts:
+            text.append(content, style=style)
+
+        self.console.print(text)
+
+    def request_input(self) -> str:
+        """
+        Request input from the user with styled prompt.
+
+        Returns:
+            The user's input string.
+
+        Raises:
+            EOFError: If user presses Ctrl+D
+            KeyboardInterrupt: If user presses Ctrl+C
+        """
+        # Print context bar
+        self._print_context_bar()
+
+        # Get input with styled prompt
+        return self.session.prompt(
+            [("class:prompt", "❯ ")],
+            bottom_toolbar=self._get_bottom_toolbar,
+        )
