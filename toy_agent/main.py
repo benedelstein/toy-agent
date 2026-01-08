@@ -9,8 +9,9 @@ from rich.console import Console
 from toy_agent.agent import Agent, AgentInterrupted
 from toy_agent.app_state import AppState
 from toy_agent.cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
+from toy_agent.commands import CommandContext, CommandResult, commands
 from toy_agent.events import EventEmitter, FinalOutputEvent
-from toy_agent.settings import SETTINGS, EditMode
+from toy_agent.settings import SETTINGS
 from toy_agent.tools import (
     create_bash_tool,
     create_glob_tool,
@@ -70,47 +71,25 @@ def handle_prompt(prompt: str, agent: Agent) -> str | None:
     """Handle user prompt, including slash commands."""
     console = Console()
 
+    # Handle slash commands via registry
     if prompt.startswith("/"):
-        parts = prompt.split()
-        command = parts[0]
+        ctx = CommandContext(
+            agent=agent,
+            console=console,
+            args=prompt.split(),
+        )
 
-        if command == "/help":
-            console.print("\n[bold]Available Commands:[/bold]")
-            console.print("  [cyan]/help[/cyan]              Show this help message")
-            console.print("  [cyan]/settings edit_mode[/cyan] [dim]<ask|always|never>[/dim]  Configure edit confirmation")
-            console.print("  [cyan]/clear[/cyan]             Clear conversation history")
-            console.print("  [cyan]/exit[/cyan]              Exit the CLI")
-            console.print()
+        result = commands.execute(ctx)
+
+        if result is None:
+            console.print(f"[red]Unknown command: {ctx.args[0]}[/red]. Type /help for available commands.")
             return None
 
-        elif command == "/settings":
-            if len(parts) < 3:
-                console.print("[yellow]Usage: /settings edit_mode <ask|always|never>[/yellow]")
+        match result:
+            case CommandResult.EXIT:
+                raise KeyboardInterrupt  # Trigger clean exit
+            case CommandResult.HANDLED:
                 return None
-            setting_name = parts[1]
-            if setting_name == "edit_mode":
-                try:
-                    edit_mode = EditMode(parts[2])
-                    SETTINGS.edit_mode = edit_mode
-                    console.print(f"[green]Edit mode set to:[/green] {edit_mode.value}")
-                except ValueError:
-                    console.print("[red]Invalid edit mode. Choose: ask, always, never[/red]")
-                return None
-            else:
-                console.print(f"[red]Unknown setting: {setting_name}[/red]")
-                return None
-
-        elif command == "/clear":
-            agent.clear_history()
-            console.print("[green]Conversation history cleared.[/green]")
-            return None
-
-        elif command == "/exit":
-            raise KeyboardInterrupt  # Trigger clean exit
-
-        else:
-            console.print(f"[red]Unknown command: {command}[/red]. Type /help for available commands.")
-            return None
 
     # Regular prompt - run through agent
     with console.status("Thinking...", spinner="earth") as status:
