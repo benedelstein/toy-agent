@@ -62,6 +62,10 @@ class Agent:
         # Create output tool with this agent's emitter
         self.output_tool = create_output_tool(self.emitter)
 
+    def clear_history(self) -> None:
+        """Clear the conversation history."""
+        self.history = []
+
     def _get_messages_for_api(self, use_thinking: bool) -> list[MessageParam]:
         """Build messages list, stripping thinking blocks if thinking is disabled."""
         if use_thinking:
@@ -259,6 +263,6 @@ class Agent:
             if result is not None:
                 return result
         raise Exception("Error: max iterations reached")
-    
+
     def reset(self):
         self.__init__(settings=self.settings, client=self.client, emitter=self.emitter)

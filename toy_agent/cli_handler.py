@@ -1,11 +1,13 @@
+from dataclasses import dataclass, field
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.document import Document
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.styles import Style as PTStyle
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.text import Text
-from rich.style import Style
-from rich.live import Live
-from prompt_toolkit import prompt
-from prompt_toolkit.styles import Style as PTStyle
+
 from .events import (
     AssistantMessageEvent,
     ConfirmationHandler,
@@ -21,6 +23,89 @@ from .events import (
     UnknownContentEvent,
     WebSearchErrorEvent,
 )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Slash Command Infrastructure
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class SlashCommand:
+    """Definition of a slash command with optional subcommands."""
+
+    name: str
+    description: str
+    subcommands: list[str] = field(default_factory=list)
+
+
+SLASH_COMMANDS: list[SlashCommand] = [
+    SlashCommand("/help", "Show available commands"),
+    SlashCommand("/settings", "Configure settings", ["edit_mode"]),
+    SlashCommand("/clear", "Clear conversation history"),
+    SlashCommand("/exit", "Exit the CLI"),
+]
+
+# Subcommand options for nested completion
+SUBCOMMAND_OPTIONS: dict[str, list[str]] = {
+    "edit_mode": ["ask", "always", "never"],
+}
+
+
+class SlashCommandCompleter(Completer):
+    """Autocomplete for slash commands with nested subcommand support."""
+
+    def __init__(self, commands: list[SlashCommand]):
+        self.commands = commands
+
+    def get_completions(self, document: Document, complete_event):
+        text = document.text_before_cursor
+
+        # Only complete if starts with /
+        if not text.startswith("/"):
+            return
+
+        parts = text.split()
+
+        if len(parts) == 0 or (len(parts) == 1 and not text.endswith(" ")):
+            # Completing the command name
+            word = parts[0] if parts else "/"
+            for cmd in self.commands:
+                if cmd.name.startswith(word):
+                    yield Completion(
+                        cmd.name,
+                        start_position=-len(word),
+                        display=cmd.name,
+                        display_meta=cmd.description,
+                    )
+        elif len(parts) >= 1:
+            # Find the command
+            cmd_name = parts[0]
+            cmd = next((c for c in self.commands if c.name == cmd_name), None)
+            if not cmd:
+                return
+
+            if len(parts) == 1 or (len(parts) == 2 and not text.endswith(" ")):
+                # Completing first subcommand
+                partial = parts[1] if len(parts) > 1 else ""
+                for subcmd in cmd.subcommands:
+                    if subcmd.startswith(partial):
+                        yield Completion(
+                            subcmd,
+                            start_position=-len(partial),
+                            display=subcmd,
+                        )
+            elif len(parts) == 2 or (len(parts) == 3 and not text.endswith(" ")):
+                # Completing subcommand options (e.g., edit_mode values)
+                subcmd = parts[1]
+                if subcmd in SUBCOMMAND_OPTIONS:
+                    partial = parts[2] if len(parts) > 2 else ""
+                    for option in SUBCOMMAND_OPTIONS[subcmd]:
+                        if option.startswith(partial):
+                            yield Completion(
+                                option,
+                                start_position=-len(partial),
+                                display=option,
+                            )
 
 
 class CLIEventHandler(EventHandler):
@@ -72,7 +157,7 @@ class CLIEventHandler(EventHandler):
 
 class CLIConfirmationHandler(ConfirmationHandler):
     """CLI confirmation handler using input()"""
-    
+
     def __init__(self):
         self.console = Console()
 
@@ -101,35 +186,68 @@ class CLIConfirmationHandler(ConfirmationHandler):
 class CLIInputHandler(InputHandler):
     """CLI input handler with styled input bar like Claude Code CLI"""
 
-    def __init__(self, prompt_prefix: str = "> ", get_status_info: callable = None):
+    def __init__(self, prompt_prefix: str = "❯", get_status_info: callable = None):
         self.prompt_prefix = prompt_prefix
         self.console = Console()
         self.get_status_info = get_status_info  # Callback to get current status (e.g., edit mode)
 
-        # prompt_toolkit style for the input
+        # Create completer for slash commands
+        self.completer = SlashCommandCompleter(SLASH_COMMANDS)
+
+        # Claude Code-inspired style theme
         self.pt_style = PTStyle.from_dict({
-            'prompt': 'ansicyan bold',
+            'prompt': '#e5c07b bold',  # Orange/yellow chevron
+            'bottom-toolbar': 'bg:#2d2d44 #666666',
+            'bottom-toolbar.key': '#61afef bold',  # Blue for shortcuts
+            'completion-menu': 'bg:#1e1e2e #cdd6f4',
+            'completion-menu.completion': 'bg:#1e1e2e #cdd6f4',
+            'completion-menu.completion.current': 'bg:#45475a #ffffff',
+            'completion-menu.meta': 'bg:#1e1e2e #888888 italic',
+            'completion-menu.meta.completion.current': 'bg:#45475a #aaaaaa italic',
         })
+
+        # Create persistent session for better UX
+        self.session = PromptSession(
+            completer=self.completer,
+            style=self.pt_style,
+            complete_while_typing=True,
+        )
+
+    def _get_toolbar(self) -> HTML:
+        """Generate bottom toolbar with keyboard hints."""
+        return HTML(
+            '<b>Ctrl+C</b> interrupt  │  '
+            '<b>/help</b> commands  │  '
+            '<b>Ctrl+D</b> exit'
+        )
+
+    def _print_context_bar(self) -> None:
+        """Print context bar above the prompt using Rich."""
+        if not self.get_status_info:
+            return
+
+        status_info = self.get_status_info()
+        if not status_info:
+            return
+
+        # Build status line
+        status_parts = []
+        for key, value in status_info.items():
+            status_parts.append(f"[dim]{key}:[/dim] [#61afef]{value}[/#61afef]")
+
+        status_text = "  │  ".join(status_parts)
+        self.console.print(f"  {status_text}")
 
     def request_input(self, prompt_text: str) -> str:
         """Request input from user via CLI with styled input bar"""
-        display_prompt = prompt_text if prompt_text else self.prompt_prefix
+        # Print context bar above the prompt
+        self._print_context_bar()
 
-        # Print status info above the input
-        if self.get_status_info:
-            status_info = self.get_status_info()
-            if status_info:
-                status_parts = []
-                for key, value in status_info.items():
-                    status_parts.append(f"[dim]{key}:[/dim] [cyan]{value}[/cyan]")
-                status_text = "  ".join(status_parts)
-                self.console.print(f"  {status_text}")
-
-        # Use prompt_toolkit for input
+        # Use prompt_toolkit PromptSession for input with autocomplete
         try:
-            user_input = prompt(
-                [('class:prompt', f'{display_prompt} ')],
-                style=self.pt_style,
+            user_input = self.session.prompt(
+                [('class:prompt', f'{self.prompt_prefix} ')],
+                bottom_toolbar=self._get_toolbar,
             )
         except (EOFError, KeyboardInterrupt):
             raise KeyboardInterrupt

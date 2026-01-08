@@ -1,13 +1,14 @@
 import os
 import sys
+from pathlib import Path
 
 import anthropic
 import dotenv
-from pathlib import Path
 from rich.console import Console
+
 from toy_agent.agent import Agent, AgentInterrupted
 from toy_agent.app_state import AppState
-from toy_agent.cli_handler import CLIEventHandler, CLIConfirmationHandler, CLIInputHandler
+from toy_agent.cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
 from toy_agent.events import EventEmitter, FinalOutputEvent
 from toy_agent.settings import SETTINGS, EditMode
 from toy_agent.tools import (
@@ -40,7 +41,7 @@ def get_status_info():
         "cwd": Path.cwd().name,
     }
 
-emitter.set_input_handler(CLIInputHandler(prompt_prefix=">", get_status_info=get_status_info))
+emitter.set_input_handler(CLIInputHandler(prompt_prefix="❯", get_status_info=get_status_info))
 
 
 def load_prompt_file(prompt_name: str) -> str:
@@ -66,15 +67,52 @@ def load_system_prompt(prompt_name: str) -> str:
 
 
 def handle_prompt(prompt: str, agent: Agent) -> str | None:
-    if prompt.startswith("/"):
-        command = prompt.split(" ")[0]
-        if command == "/settings":
-            settings = prompt.split(" ")[1]
-            if settings == "edit_mode":
-                edit_mode = prompt.split(" ")[2]
-                SETTINGS.edit_mode = EditMode(edit_mode)
-                return "Edit mode set to " + edit_mode
+    """Handle user prompt, including slash commands."""
     console = Console()
+
+    if prompt.startswith("/"):
+        parts = prompt.split()
+        command = parts[0]
+
+        if command == "/help":
+            console.print("\n[bold]Available Commands:[/bold]")
+            console.print("  [cyan]/help[/cyan]              Show this help message")
+            console.print("  [cyan]/settings edit_mode[/cyan] [dim]<ask|always|never>[/dim]  Configure edit confirmation")
+            console.print("  [cyan]/clear[/cyan]             Clear conversation history")
+            console.print("  [cyan]/exit[/cyan]              Exit the CLI")
+            console.print()
+            return None
+
+        elif command == "/settings":
+            if len(parts) < 3:
+                console.print("[yellow]Usage: /settings edit_mode <ask|always|never>[/yellow]")
+                return None
+            setting_name = parts[1]
+            if setting_name == "edit_mode":
+                try:
+                    edit_mode = EditMode(parts[2])
+                    SETTINGS.edit_mode = edit_mode
+                    console.print(f"[green]Edit mode set to:[/green] {edit_mode.value}")
+                except ValueError:
+                    console.print("[red]Invalid edit mode. Choose: ask, always, never[/red]")
+                return None
+            else:
+                console.print(f"[red]Unknown setting: {setting_name}[/red]")
+                return None
+
+        elif command == "/clear":
+            agent.clear_history()
+            console.print("[green]Conversation history cleared.[/green]")
+            return None
+
+        elif command == "/exit":
+            raise KeyboardInterrupt  # Trigger clean exit
+
+        else:
+            console.print(f"[red]Unknown command: {command}[/red]. Type /help for available commands.")
+            return None
+
+    # Regular prompt - run through agent
     with console.status("Thinking...", spinner="earth") as status:
         try:
             response = agent.run(prompt=prompt, max_iterations=None)
@@ -139,16 +177,16 @@ def main():
         system_prompt=load_system_prompt(prompt_name="main_agent"),
         emitter=emitter,
     )
-    
+
     # Initialize file watcher for IDE integration
     file_watcher = None
     try:
         from toy_agent.file_watcher import FileWatcher
-        
+
         def handle_file_event(event_type: str, file_path: str):
             # For now, just print the file events
             print(f"[File Event] User {event_type}: {file_path}")
-            
+
         project_root = str(Path.cwd())
         file_watcher = FileWatcher(project_root, handle_file_event)
         file_watcher.start()
