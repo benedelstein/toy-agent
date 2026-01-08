@@ -141,6 +141,31 @@ The `TEXT_EDITOR_TOOL` respects edit mode:
 4. **Check error handling**: Try invalid inputs, missing files, etc.
 5. **Review conversation history**: Ensure messages are properly formatted
 
+## CI Checks (Required Before Committing)
+
+**IMPORTANT**: Always run all CI checks after completing any task. Do not commit until all checks pass.
+
+```bash
+# Run all three CI checks:
+uv run ruff check .           # Linter
+uv run ruff format --check .  # Formatter check
+uv run pyright                 # Type checking
+```
+
+Or run them all in one command:
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run pyright
+```
+
+### Fixing CI Failures
+
+- **Linter errors**: `uv run ruff check . --fix`
+- **Formatter errors**: `uv run ruff format .`
+- **Type errors**: Fix manually - common issues:
+  - Use `Callable` from `typing` instead of lowercase `callable`
+  - Add `# type: ignore[import-not-found]` for optional dependencies
+  - Ensure all function signatures have proper type annotations
+
 ## Common Pitfalls to Avoid
 
 1. ❌ **Don't approximate `old_str`**: Must be EXACT match including whitespace
