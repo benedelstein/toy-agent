@@ -3,8 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from events import EventEmitter
-from tools.tool import Tool
+from ..events import EventEmitter
+from .tool import Tool
 
 
 class GrepInput(BaseModel):

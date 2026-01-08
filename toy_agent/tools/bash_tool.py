@@ -1,9 +1,9 @@
 from anthropic.types import ToolBash20250124Param, ToolUnionParam
 from pydantic import BaseModel
 
-from events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
-from tools.bash_session import BashSession
-from tools.tool import Tool, ToolResult
+from ..events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
+from .bash_session import BashSession
+from .tool import Tool, ToolResult
 
 
 class BashInput(BaseModel):

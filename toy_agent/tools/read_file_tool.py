@@ -2,8 +2,8 @@ import os
 
 from pydantic import BaseModel
 
-from events import EventEmitter, FileViewedEvent
-from tools.tool import Tool
+from ..events import EventEmitter, FileViewedEvent
+from .tool import Tool
 
 
 class ReadFileInput(BaseModel):

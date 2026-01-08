@@ -4,12 +4,12 @@ import sys
 import anthropic
 import dotenv
 
-from agent import Agent
-from app_state import AppState
-from cli_handler import SLASH_COMMANDS, CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
-from events import EventEmitter, FinalOutputEvent
-from settings import SETTINGS, EditMode
-from tools import (
+from .agent import Agent
+from .app_state import AppState
+from .cli_handler import SLASH_COMMANDS, CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
+from .events import EventEmitter, FinalOutputEvent
+from .settings import SETTINGS, EditMode
+from .tools import (
     create_bash_tool,
     create_glob_tool,
     create_grep_tool,
@@ -19,8 +19,8 @@ from tools import (
     create_text_editor_tool,
     create_write_todos_tool,
 )
-from tools.github_tool import create_pull_request_tool
-from tools.sub_agent_tool import agent_types
+from .tools.github_tool import create_pull_request_tool
+from .tools.sub_agent_tool import agent_types
 
 dotenv.load_dotenv()
 
@@ -148,7 +148,8 @@ def create_agent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
         )
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Main entry point for the CLI."""
     agent = Agent(
         settings=SETTINGS,
         client=client,
@@ -191,3 +192,7 @@ if __name__ == "__main__":
         except EOFError:
             print("\nGoodbye!")
             break
+
+
+if __name__ == "__main__":
+    main()

@@ -10,7 +10,7 @@ from prompt_toolkit.styles import Style as PTStyle
 from rich.console import Console
 from rich.text import Text
 
-from events import (
+from .events import (
     AssistantMessageEvent,
     ConfirmationHandler,
     Event,

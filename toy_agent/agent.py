@@ -20,10 +20,10 @@ from anthropic.types import (
     WebSearchToolResultBlockParam,
 )
 
-from events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
-from settings import Settings
-from tools import Tool, ToolResult
-from tools.output_tool import create_output_tool
+from .events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
+from .settings import Settings
+from .tools import Tool, ToolResult
+from .tools.output_tool import create_output_tool
 
 # Tool name constant for text editor filtering
 TEXT_EDITOR_TOOL_NAME = "str_replace_based_edit_tool"

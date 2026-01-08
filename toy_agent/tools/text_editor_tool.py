@@ -4,16 +4,15 @@ from typing import Annotated, Literal, Union
 from anthropic.types import ToolTextEditor20250728Param, ToolUnionParam
 from pydantic import BaseModel, Field, RootModel
 
-from events import (
+from ..events import (
     EventEmitter,
     FileViewedEvent,
     ToolCompletedEvent,
     ToolErrorEvent,
     ToolStartedEvent,
 )
-from settings import EditMode, Settings
-from tools import ToolResult
-from tools.tool import Tool
+from ..settings import EditMode, Settings
+from .tool import Tool, ToolResult
 
 
 class TextEditorViewCommand(BaseModel):
