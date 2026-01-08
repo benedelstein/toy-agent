@@ -22,9 +22,6 @@ from anthropic.types import (
 from anthropic.types.beta.tool_search_tool_result_block_param import (
     ToolSearchToolResultBlockParam,
 )
-from anthropic.types.beta.tool_search_tool_use_block_param import (
-    ToolSearchToolUseBlockParam,
-)
 
 from events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
 from settings import Settings
@@ -162,18 +159,10 @@ class Agent:
                 )
                 tool_calls.append((content.id, content.name, content.input))
             elif content.type == "server_tool_use":
+                # Handles server-side tools including tool_search_tool_regex and tool_search_tool_bm25
                 assistant_content.append(
                     ServerToolUseBlockParam(
                         type="server_tool_use",
-                        id=content.id,
-                        name=content.name,
-                        input=content.input,
-                    )
-                )
-            elif content.type == "tool_search_tool_use":
-                assistant_content.append(
-                    ToolSearchToolUseBlockParam(
-                        type="tool_search_tool_use",
                         id=content.id,
                         name=content.name,
                         input=content.input,
