@@ -1,6 +1,7 @@
 - [x] Github tool - gh cli? maybe need multiple tools, 1 for each action.
 - [x] CLI formatting or better UI
 - [ ] Ask user question tool
+- [ ] File watcher to inject open file context
 - [ ] Show interactive diffs
 - [ ] Image uploads
 - [ ] loading state
