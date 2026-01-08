@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Callable
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
@@ -192,7 +193,11 @@ class CLIConfirmationHandler(ConfirmationHandler):
 class CLIInputHandler(InputHandler):
     """CLI input handler with styled input bar like Claude Code CLI"""
 
-    def __init__(self, prompt_prefix: str = "❯", get_status_info: callable = None):
+    def __init__(
+        self,
+        prompt_prefix: str = "❯",
+        get_status_info: Callable[[], dict[str, str]] | None = None,
+    ):
         self.prompt_prefix = prompt_prefix
         self.console = Console()
         self.get_status_info = get_status_info  # Callback to get current status (e.g., edit mode)

@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pylsp.server import LanguageServer
+from pylsp.server import LanguageServer  # type: ignore[import-not-found]
 
 
 class AgentLSPServer(LanguageServer):
