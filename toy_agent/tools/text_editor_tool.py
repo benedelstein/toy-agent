@@ -12,8 +12,7 @@ from ..events import (
     ToolStartedEvent,
 )
 from ..settings import EditMode, Settings
-from . import ToolResult
-from .tool import Tool
+from .tool import Tool, ToolResult
 from .utils import read_file_with_line_numbers, validate_path_within_project
 
 
