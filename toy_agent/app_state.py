@@ -7,6 +7,7 @@ from .todo import Todo
 @dataclass
 class FileEvent:
     """Represents a file event from the file watcher."""
+
     event_type: str
     file_path: str
     timestamp: float
@@ -15,6 +16,7 @@ class FileEvent:
 @dataclass
 class AppState:
     """Global application state."""
+
     todos: list[Todo] = field(default_factory=list)
     file_events: list[FileEvent] = field(default_factory=list)
 

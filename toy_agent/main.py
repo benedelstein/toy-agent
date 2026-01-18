@@ -76,15 +76,16 @@ def load_system_prompt(prompt_name: str) -> str:
     return base_prompt
 
 
-def build_prompt_with_file_context(prompt: str, app_state: AppState, ttl_seconds: float = 60.0) -> str:
+def build_prompt_with_file_context(
+    prompt: str, app_state: AppState, ttl_seconds: float = 60.0
+) -> str:
     """Prepend file context to prompt if there are recent file events."""
     events = app_state.get_and_clear_recent_events(ttl_seconds=ttl_seconds)
     if not events:
         return prompt
 
     context_lines = [
-        f"<file_context>user opened ./{e.file_path} in their IDE</file_context>"
-        for e in events
+        f"<file_context>user opened ./{e.file_path} in their IDE</file_context>" for e in events
     ]
     return "\n".join(context_lines) + "\n\n" + prompt
 

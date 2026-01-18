@@ -1,4 +1,5 @@
 """File watcher for IDE integration - monitors file modifications."""
+
 import threading
 import time
 from pathlib import Path
@@ -7,12 +8,34 @@ from typing import Callable
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-
 # File extensions to watch
-WATCHED_EXTENSIONS = {'.py', '.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.ts', '.js', '.tsx', '.jsx', '.html', '.css'}
+WATCHED_EXTENSIONS = {
+    ".py",
+    ".md",
+    ".txt",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ts",
+    ".js",
+    ".tsx",
+    ".jsx",
+    ".html",
+    ".css",
+}
 
 # Paths/patterns to ignore
-IGNORED_PATTERNS = {'__pycache__', '.git', '.pytest_cache', 'node_modules', '.venv', 'venv', '.mypy_cache', '.ruff_cache'}
+IGNORED_PATTERNS = {
+    "__pycache__",
+    ".git",
+    ".pytest_cache",
+    "node_modules",
+    ".venv",
+    "venv",
+    ".mypy_cache",
+    ".ruff_cache",
+}
 
 
 class FileEventHandler(FileSystemEventHandler):
@@ -43,7 +66,9 @@ class FileEventHandler(FileSystemEventHandler):
             return
 
         # Normalize path
-        src_path = event.src_path.decode('utf-8') if isinstance(event.src_path, bytes) else event.src_path
+        src_path = (
+            event.src_path.decode("utf-8") if isinstance(event.src_path, bytes) else event.src_path
+        )
         path = Path(src_path)
 
         # Check filters
