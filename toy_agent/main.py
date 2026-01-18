@@ -1,14 +1,15 @@
 import os
 import sys
+from pathlib import Path
 
 import anthropic
 import dotenv
-from pathlib import Path
-from rich.console import Console
+
 from toy_agent.agent import Agent, AgentInterrupted
 from toy_agent.app_state import AppState
-from toy_agent.cli_handler import CLIEventHandler, CLIConfirmationHandler, CLIInputHandler
-from toy_agent.events import EventEmitter, FinalOutputEvent
+from toy_agent.cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
+from toy_agent.commands import CommandContext, CommandResult, commands
+from toy_agent.events import CommandOutputEvent, EventEmitter, FinalOutputEvent
 from toy_agent.settings import SETTINGS, EditMode
 from toy_agent.tools import (
     create_bash_tool,
@@ -33,14 +34,24 @@ emitter = EventEmitter()
 emitter.add_handler(CLIEventHandler(verbose=False))
 emitter.set_confirmation_handler(CLIConfirmationHandler())
 
+
 def get_status_info():
     """Return current status info for the input bar"""
+    match SETTINGS.edit_mode:
+        case EditMode.ASK:
+            edit_str = "ask before edits"
+        case EditMode.ALWAYS:
+            edit_str = "⏵⏵ accept edits"
+        case EditMode.NEVER:
+            edit_str = "✗✗ block edits"
+
     return {
-        "edit": SETTINGS.edit_mode.value,
+        "edit": edit_str,
         "cwd": Path.cwd().name,
     }
 
-emitter.set_input_handler(CLIInputHandler(prompt_prefix=">", get_status_info=get_status_info))
+
+emitter.set_input_handler(CLIInputHandler(prompt_prefix="❯", get_status_info=get_status_info))
 
 
 def load_prompt_file(prompt_name: str) -> str:
@@ -54,38 +65,54 @@ def load_system_prompt(prompt_name: str) -> str:
     """Load system prompt with agents.md context if available."""
     base_prompt = load_prompt_file(prompt_name)
 
-    # Look for agents.md in the project root (one level up from this file's directory)
-    project_root = os.path.dirname(os.path.dirname(__file__))
+    # Look for agents.md in the current working directory
+    project_root = os.getcwd()
     agents_md_path = os.path.join(project_root, "agents.md")
     if os.path.exists(agents_md_path):
         with open(agents_md_path, "r") as f:
             agents_context = f.read()
-        return f"{base_prompt}\n\n{agents_context}"
+        return f"{base_prompt}\n\n<repo_context>\n{agents_context}\n</repo_context>"
 
     return base_prompt
 
 
 def handle_prompt(prompt: str, agent: Agent) -> str | None:
+    """Handle user prompt, including slash commands."""
+    # Handle slash commands via registry
     if prompt.startswith("/"):
-        command = prompt.split(" ")[0]
-        if command == "/settings":
-            settings = prompt.split(" ")[1]
-            if settings == "edit_mode":
-                edit_mode = prompt.split(" ")[2]
-                SETTINGS.edit_mode = EditMode(edit_mode)
-                return "Edit mode set to " + edit_mode
-    console = Console()
-    with console.status("Thinking...", spinner="earth") as status:
-        try:
-            response = agent.run(prompt=prompt, max_iterations=None)
-            status.stop()
-            return response
-        except AgentInterrupted:
-            status.stop()
-            console.print("[yellow]Interrupted - returning to prompt[/yellow]")
+        ctx = CommandContext(
+            agent=agent,
+            emitter=emitter,
+            args=prompt.split(),
+        )
+
+        result = commands.execute(ctx)
+
+        if result is None:
+            emitter.emit(
+                CommandOutputEvent(
+                    message=f"Unknown command: {ctx.args[0]}. Type /help for available commands.",
+                    style="error",
+                )
+            )
             return None
 
-def create_agent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
+        match result:
+            case CommandResult.EXIT:
+                raise KeyboardInterrupt  # Trigger clean exit
+            case CommandResult.HANDLED:
+                return None
+
+    # Regular prompt - run through agent
+    try:
+        response = agent.run(prompt=prompt, max_iterations=None)
+        return response
+    except AgentInterrupted:
+        emitter.emit(CommandOutputEvent(message="Interrupted - returning to prompt", style="error"))
+        return None
+
+
+def create_subagent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
     if agent_type == "explore":
         return Agent(
             settings=SETTINGS,
@@ -130,7 +157,7 @@ def main():
             create_read_file_tool(emitter),
             create_text_editor_tool(emitter, SETTINGS),
             create_bash_tool(emitter),
-            create_sub_agent_tool(emitter, create_agent),
+            create_sub_agent_tool(emitter, create_subagent),
             create_write_todos_tool(emitter, app_state),
             create_pull_request_tool(emitter),
         ],
@@ -139,16 +166,16 @@ def main():
         system_prompt=load_system_prompt(prompt_name="main_agent"),
         emitter=emitter,
     )
-    
+
     # Initialize file watcher for IDE integration
     file_watcher = None
     try:
         from toy_agent.file_watcher import FileWatcher
-        
+
         def handle_file_event(event_type: str, file_path: str):
             # For now, just print the file events
             print(f"[File Event] User {event_type}: {file_path}")
-            
+
         project_root = str(Path.cwd())
         file_watcher = FileWatcher(project_root, handle_file_event)
         file_watcher.start()
@@ -161,6 +188,7 @@ def main():
         emitter.emit(FinalOutputEvent(result=result))
 
     import time
+
     last_interrupt_time: float | None = None
     interrupt_debounce = 1.0  # seconds
 
@@ -176,7 +204,10 @@ def main():
                 print()  # Add newline after output # TODO: REMOVE
             except KeyboardInterrupt:
                 now = time.time()
-                if last_interrupt_time is not None and (now - last_interrupt_time) <= interrupt_debounce:
+                if (
+                    last_interrupt_time is not None
+                    and (now - last_interrupt_time) <= interrupt_debounce
+                ):
                     # Second Ctrl+C within debounce - exit
                     raise
                 last_interrupt_time = now

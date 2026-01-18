@@ -1,0 +1,8 @@
+#!/bin/sh
+# Pre-commit hook: runs ruff linter and formatter
+
+uv run ruff check . --fix
+uv run ruff format .
+
+# Re-add any files that were modified by the fixes
+git add -u

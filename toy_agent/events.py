@@ -62,6 +62,13 @@ class TodosUpdatedEvent:
     type: Literal["todos_updated"] = field(default="todos_updated", repr=False)
 
 
+@dataclass
+class CommandOutputEvent:
+    message: str
+    style: Literal["default", "error", "success", "info"] = "default"
+    type: Literal["command_output"] = field(default="command_output", repr=False)
+
+
 # Discriminated union - type checker knows which fields are available
 Event = Annotated[
     Union[
@@ -74,6 +81,7 @@ Event = Annotated[
         UnknownContentEvent,
         FinalOutputEvent,
         TodosUpdatedEvent,
+        CommandOutputEvent,
     ],
     Field(discriminator="type"),
 ]

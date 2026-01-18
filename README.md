@@ -68,6 +68,7 @@ Clean separation of concerns with:
 - **Type Safety**: Extensive use of Pydantic BaseModels for structured I/O
 - **Generic Types**: Tool base class uses TypeVars for flexible typing
 - **Security**: Path validation ensures tools only access files within project
+- **Composable UI**: The ui handler is decoupled from the agent, allowing for easy swapping of UI.
 - **Extensibility**: Easy to add new tools by following the established pattern
 
 ## How It Works
@@ -85,34 +86,7 @@ Clean separation of concerns with:
 
 ### Interactive Mode
 ```bash
-python main.py
-```
-
-Start an interactive REPL session where you can have extended conversations with the agent.
-
-### CLI Mode
-```bash
-python main.py "your prompt here"
-```
-
-Execute a single prompt and get a response.
-
-### Programmatic Usage
-```python
-from agent import Agent
-from tools import PING_TOOL, READ_FILE_TOOL, TEXT_EDITOR_TOOL
-
-agent = Agent(
-    tools=[PING_TOOL, READ_FILE_TOOL, TEXT_EDITOR_TOOL],
-    thinking_enabled=True,
-    system_prompt="You are a helpful coding assistant."
-)
-
-result = agent.run(
-    prompt="Read the main.py file and explain what it does",
-    max_iterations=10
-)
-print(result)
+uv run toy_agent/main.py
 ```
 
 ## Requirements
@@ -133,36 +107,9 @@ Set your Anthropic API key in a `.env` file:
 ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-## Project Structure
+## Testing
 
+install globally
+```bash
+uv tool install --editable .
 ```
-toy-agent/
-├── agent.py             # Core Agent class
-├── main.py              # CLI entry point and interactive REPL
-├── tools/               # Tool implementations
-│   ├── __init__.py      # Tool exports
-│   ├── tool.py          # Base Tool and ToolResult classes
-│   ├── bash_tool.py     # Bash command execution
-│   ├── bash_session.py  # Persistent bash session manager
-│   ├── grep_tool.py     # File pattern searching
-│   ├── ping_tool.py     # Network connectivity testing
-│   ├── read_file_tool.py # File reading
-│   ├── text_editor_tool.py # File editing
-│   ├── output_tool.py   # Task completion signaling
-│   └── utils.py         # Path validation utilities
-├── pyproject.toml       # Project metadata and dependencies
-└── README.md            # This file
-```
-
-## Future Enhancements
-
-- Configurable stop conditions
-- Tool whitelisting/blacklisting per agent instance
-- Streaming responses
-- Token usage tracking and budgets
-- Additional tool integrations
-- Multi-agent coordination
-
-## License
-
-This is a demonstration project for educational purposes.

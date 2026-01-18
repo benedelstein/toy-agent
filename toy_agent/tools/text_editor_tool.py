@@ -12,8 +12,7 @@ from ..events import (
     ToolStartedEvent,
 )
 from ..settings import EditMode, Settings
-from . import ToolResult
-from .tool import Tool
+from .tool import Tool, ToolResult
 from .utils import read_file_with_line_numbers, validate_path_within_project
 
 
@@ -89,17 +88,17 @@ class TextEditorTool(Tool):
         if cmd.command == "view":
             self.emitter.emit(FileViewedEvent(path=cmd.path))
             self._validate_path(cmd.path)
-            
+
             # Check if it's a directory
             if os.path.isdir(cmd.path):
                 return TextEditorOutput(content=self._list_directory(cmd.path))
-            
+
             # Parse view_range if specified
             start_line = None
             end_line = None
             if cmd.view_range is not None:
                 start_line, end_line = cmd.view_range
-            
+
             result = read_file_with_line_numbers(
                 path=cmd.path,
                 start_line=start_line,
@@ -221,23 +220,23 @@ class TextEditorTool(Tool):
     def _list_directory(self, path: str, max_depth: int = 2) -> str:
         """List files and directories up to max_depth levels deep, ignoring hidden items and node_modules."""
         abs_path = validate_path_within_project(path)
-        
-        IGNORED_NAMES = {'node_modules', '__pycache__', '.git', '.venv', 'venv', '.env'}
-        
+
+        IGNORED_NAMES = {"node_modules", "__pycache__", ".git", ".venv", "venv", ".env"}
+
         lines = []
-        
+
         def walk_directory(current_path: str, prefix: str = "", depth: int = 0):
             if depth > max_depth:
                 return
-            
+
             try:
                 entries = sorted(os.listdir(current_path))
             except PermissionError:
                 return
-            
+
             # Filter out hidden files and ignored directories
-            entries = [e for e in entries if not e.startswith('.') and e not in IGNORED_NAMES]
-            
+            entries = [e for e in entries if not e.startswith(".") and e not in IGNORED_NAMES]
+
             dirs = []
             files = []
             for entry in entries:
@@ -246,31 +245,27 @@ class TextEditorTool(Tool):
                     dirs.append(entry)
                 else:
                     files.append(entry)
-            
+
             # List directories first, then files
             all_entries = [(d, True) for d in dirs] + [(f, False) for f in files]
-            
+
             for i, (entry, is_dir) in enumerate(all_entries):
                 is_last = i == len(all_entries) - 1
                 connector = "└── " if is_last else "├── "
-                
+
                 if is_dir:
                     lines.append(f"{prefix}{connector}{entry}/")
                     # Recurse into directory
                     extension = "    " if is_last else "│   "
-                    walk_directory(
-                        os.path.join(current_path, entry),
-                        prefix + extension,
-                        depth + 1
-                    )
+                    walk_directory(os.path.join(current_path, entry), prefix + extension, depth + 1)
                 else:
                     lines.append(f"{prefix}{connector}{entry}")
-        
+
         # Add the root directory name
         dir_name = os.path.basename(abs_path) or abs_path
         lines.append(f"{dir_name}/")
         walk_directory(abs_path)
-        
+
         return "\n".join(lines)
 
     def _confirm_command(self, command: str, path: str, contents: str):
@@ -287,7 +282,9 @@ class TextEditorTool(Tool):
             tool_name="str_replace_based_edit_tool", action=command, path=path, preview=contents
         )
         if not approved:
-            raise ValueError(f"Command '{command}' on file '{path}' skipped - user-provided reason: {reason or 'no reason given'}")
+            raise ValueError(
+                f"Command '{command}' on file '{path}' skipped - user-provided reason: {reason or 'no reason given'}"
+            )
         return True
 
     def to_anthropic_tool(self) -> ToolUnionParam:
