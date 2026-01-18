@@ -11,6 +11,7 @@ from rich.markdown import Markdown
 
 from .events import (
     AssistantMessageEvent,
+    CommandOutputEvent,
     ConfirmationHandler,
     Event,
     EventHandler,
@@ -123,6 +124,17 @@ class CLIEventHandler(EventHandler):
                 markdown = Markdown("💬 " + text)
                 self.console.print(markdown)
 
+            case CommandOutputEvent(message=msg, style=style):
+                match style:
+                    case "error":
+                        self.console.print(f"[red]{msg}[/red]")
+                    case "success":
+                        self.console.print(f"[green]{msg}[/green]")
+                    case "info":
+                        self.console.print(f"[cyan]{msg}[/cyan]")
+                    case _:
+                        self.console.print(msg)
+
             case ToolErrorEvent(tool_name=name, error=err):
                 self.console.print(f"🛠️ [bold red]Tool {name} error:[/bold red] {err}")
 
@@ -228,7 +240,9 @@ class CLIInputHandler(InputHandler):
 
     def _get_toolbar(self) -> HTML:
         """Generate bottom toolbar with keyboard hints."""
-        return HTML("<b>Ctrl+C</b> interrupt  │  <b>/help</b> commands  │  <b>Ctrl+D</b> exit")
+        return HTML(
+            "<b>Ctrl+C</b> interrupt  │  <b>/help</b> commands  │  <b>Ctrl+C</b> twice to exit"
+        )
 
     def _print_context_bar(self) -> None:
         """Print context bar above the prompt using Rich."""

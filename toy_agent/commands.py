@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
-from rich.console import Console
-
 from toy_agent.agent import Agent
+from toy_agent.events import CommandOutputEvent, EventEmitter
 from toy_agent.settings import SETTINGS, EditMode
 
 
@@ -22,7 +21,7 @@ class CommandContext:
     """Context passed to command handlers."""
 
     agent: Agent
-    console: Console
+    emitter: EventEmitter
     args: list[str]  # Arguments after the command name (e.g., ["/settings", "edit_mode", "ask"])
 
 
@@ -75,14 +74,14 @@ commands = CommandRegistry()
 @commands.register("/help")
 def cmd_help(ctx: CommandContext) -> CommandResult:
     """Show available commands."""
-    ctx.console.print("\n[bold]Available Commands:[/bold]")
-    ctx.console.print("  [cyan]/help[/cyan]              Show this help message")
-    ctx.console.print(
-        "  [cyan]/settings edit_mode[/cyan] [dim]<ask|always|never>[/dim]  Configure edit confirmation"
-    )
-    ctx.console.print("  [cyan]/clear[/cyan]             Clear conversation history")
-    ctx.console.print("  [cyan]/exit[/cyan]              Exit the CLI")
-    ctx.console.print()
+    help_text = """
+Available Commands:
+  /help              Show this help message
+  /settings edit_mode <ask|always|never>  Configure edit confirmation
+  /clear             Clear conversation history
+  /exit              Exit the CLI
+"""
+    ctx.emitter.emit(CommandOutputEvent(message=help_text, style="info"))
     return CommandResult.HANDLED
 
 
@@ -92,7 +91,11 @@ def cmd_settings(ctx: CommandContext) -> CommandResult:
     args = ctx.args
 
     if len(args) < 3:
-        ctx.console.print("[yellow]Usage: /settings edit_mode <ask|always|never>[/yellow]")
+        ctx.emitter.emit(
+            CommandOutputEvent(
+                message="Usage: /settings edit_mode <ask|always|never>", style="error"
+            )
+        )
         return CommandResult.HANDLED
 
     setting_name = args[1]
@@ -102,11 +105,21 @@ def cmd_settings(ctx: CommandContext) -> CommandResult:
             try:
                 edit_mode = EditMode(args[2])
                 SETTINGS.edit_mode = edit_mode
-                ctx.console.print(f"[green]Edit mode set to:[/green] {edit_mode.value}")
+                ctx.emitter.emit(
+                    CommandOutputEvent(
+                        message=f"Edit mode set to: {edit_mode.value}", style="success"
+                    )
+                )
             except ValueError:
-                ctx.console.print("[red]Invalid edit mode. Choose: ask, always, never[/red]")
+                ctx.emitter.emit(
+                    CommandOutputEvent(
+                        message="Invalid edit mode. Choose: ask, always, never", style="error"
+                    )
+                )
         case _:
-            ctx.console.print(f"[red]Unknown setting: {setting_name}[/red]")
+            ctx.emitter.emit(
+                CommandOutputEvent(message=f"Unknown setting: {setting_name}", style="error")
+            )
 
     return CommandResult.HANDLED
 
@@ -115,7 +128,7 @@ def cmd_settings(ctx: CommandContext) -> CommandResult:
 def cmd_clear(ctx: CommandContext) -> CommandResult:
     """Clear conversation history."""
     ctx.agent.clear_history()
-    ctx.console.print("[green]Conversation history cleared.[/green]")
+    ctx.emitter.emit(CommandOutputEvent(message="Conversation history cleared.", style="success"))
     return CommandResult.HANDLED
 
 

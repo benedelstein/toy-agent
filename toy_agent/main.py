@@ -4,14 +4,13 @@ from pathlib import Path
 
 import anthropic
 import dotenv
-from rich.console import Console
 
 from toy_agent.agent import Agent, AgentInterrupted
 from toy_agent.app_state import AppState
 from toy_agent.cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
 from toy_agent.commands import CommandContext, CommandResult, commands
-from toy_agent.events import EventEmitter, FinalOutputEvent
-from toy_agent.settings import SETTINGS
+from toy_agent.events import CommandOutputEvent, EventEmitter, FinalOutputEvent
+from toy_agent.settings import SETTINGS, EditMode
 from toy_agent.tools import (
     create_bash_tool,
     create_glob_tool,
@@ -38,8 +37,16 @@ emitter.set_confirmation_handler(CLIConfirmationHandler())
 
 def get_status_info():
     """Return current status info for the input bar"""
+    match SETTINGS.edit_mode:
+        case EditMode.ASK:
+            edit_str = "ask before edits"
+        case EditMode.ALWAYS:
+            edit_str = "⏵⏵ accept edits"
+        case EditMode.NEVER:
+            edit_str = "✗✗ block edits"
+
     return {
-        "edit": SETTINGS.edit_mode.value,
+        "edit": edit_str,
         "cwd": Path.cwd().name,
     }
 
@@ -58,34 +65,35 @@ def load_system_prompt(prompt_name: str) -> str:
     """Load system prompt with agents.md context if available."""
     base_prompt = load_prompt_file(prompt_name)
 
-    # Look for agents.md in the project root (one level up from this file's directory)
-    project_root = os.path.dirname(os.path.dirname(__file__))
+    # Look for agents.md in the current working directory
+    project_root = os.getcwd()
     agents_md_path = os.path.join(project_root, "agents.md")
     if os.path.exists(agents_md_path):
         with open(agents_md_path, "r") as f:
             agents_context = f.read()
-        return f"{base_prompt}\n\n{agents_context}"
+        return f"{base_prompt}\n\n<repo_context>\n{agents_context}\n</repo_context>"
 
     return base_prompt
 
 
 def handle_prompt(prompt: str, agent: Agent) -> str | None:
     """Handle user prompt, including slash commands."""
-    console = Console()
-
     # Handle slash commands via registry
     if prompt.startswith("/"):
         ctx = CommandContext(
             agent=agent,
-            console=console,
+            emitter=emitter,
             args=prompt.split(),
         )
 
         result = commands.execute(ctx)
 
         if result is None:
-            console.print(
-                f"[red]Unknown command: {ctx.args[0]}[/red]. Type /help for available commands."
+            emitter.emit(
+                CommandOutputEvent(
+                    message=f"Unknown command: {ctx.args[0]}. Type /help for available commands.",
+                    style="error",
+                )
             )
             return None
 
@@ -96,18 +104,15 @@ def handle_prompt(prompt: str, agent: Agent) -> str | None:
                 return None
 
     # Regular prompt - run through agent
-    with console.status("Thinking...", spinner="earth") as status:
-        try:
-            response = agent.run(prompt=prompt, max_iterations=None)
-            status.stop()
-            return response
-        except AgentInterrupted:
-            status.stop()
-            console.print("[yellow]Interrupted - returning to prompt[/yellow]")
-            return None
+    try:
+        response = agent.run(prompt=prompt, max_iterations=None)
+        return response
+    except AgentInterrupted:
+        emitter.emit(CommandOutputEvent(message="Interrupted - returning to prompt", style="error"))
+        return None
 
 
-def create_agent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
+def create_subagent(agent_type: agent_types, agent_emitter: EventEmitter) -> Agent:
     if agent_type == "explore":
         return Agent(
             settings=SETTINGS,
@@ -152,7 +157,7 @@ def main():
             create_read_file_tool(emitter),
             create_text_editor_tool(emitter, SETTINGS),
             create_bash_tool(emitter),
-            create_sub_agent_tool(emitter, create_agent),
+            create_sub_agent_tool(emitter, create_subagent),
             create_write_todos_tool(emitter, app_state),
             create_pull_request_tool(emitter),
         ],
