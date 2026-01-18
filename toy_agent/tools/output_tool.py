@@ -19,7 +19,7 @@ def run_output(input: OutputToolInput) -> OutputToolOutput:
 def create_output_tool(emitter: EventEmitter) -> Tool:
     return Tool(
         tool_name="output",
-        description="Output the final result to the user. Use this tool when you are ready to deliver a response - **do not** use the regular text output response type.",
+        description="Output the final result to the user. Use this tool when you have completed a task and want to provide a structured response. For simple conversational responses, you may also just respond with plain text.",
         input_schema=OutputToolInput,
         output_schema=OutputToolOutput,
         run=run_output,

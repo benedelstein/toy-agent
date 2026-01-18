@@ -16,6 +16,9 @@ ALWAYS_IGNORED_DIRS = {
     ".git",
 }
 
+# Patterns for temp files to ignore (e.g., foo.py.tmp.25913.176877156139)
+TEMP_FILE_PATTERN = ".tmp."
+
 
 class FileEventHandler(FileSystemEventHandler):
     """Handle file system events with proper debouncing."""
@@ -43,6 +46,10 @@ class FileEventHandler(FileSystemEventHandler):
 
     def _should_ignore(self, path: Path) -> bool:
         """Check if path should be ignored based on .gitignore and hardcoded patterns."""
+        # Ignore temp files (e.g., foo.py.tmp.25913.176877156139)
+        if TEMP_FILE_PATTERN in path.name:
+            return True
+
         # Always ignore .git directory
         parts = path.parts
         for dir_name in ALWAYS_IGNORED_DIRS:

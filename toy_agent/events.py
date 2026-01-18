@@ -82,6 +82,40 @@ class AgentCompletedEvent:
     type: Literal["agent_completed"] = field(default="agent_completed", repr=False)
 
 
+# Streaming events
+@dataclass
+class TextDeltaEvent:
+    """Emitted for each text chunk during streaming."""
+
+    text: str
+    type: Literal["text_delta"] = field(default="text_delta", repr=False)
+
+
+@dataclass
+class ThinkingDeltaEvent:
+    """Emitted for each thinking chunk during streaming."""
+
+    thinking: str
+    type: Literal["thinking_delta"] = field(default="thinking_delta", repr=False)
+
+
+@dataclass
+class ContentBlockStartEvent:
+    """Emitted when a content block starts during streaming."""
+
+    index: int
+    block_type: str  # "text", "thinking", "tool_use"
+    type: Literal["content_block_start"] = field(default="content_block_start", repr=False)
+
+
+@dataclass
+class ContentBlockStopEvent:
+    """Emitted when a content block completes during streaming."""
+
+    index: int
+    type: Literal["content_block_stop"] = field(default="content_block_stop", repr=False)
+
+
 # Discriminated union - type checker knows which fields are available
 Event = Annotated[
     Union[
@@ -97,6 +131,10 @@ Event = Annotated[
         CommandOutputEvent,
         AgentStartedEvent,
         AgentCompletedEvent,
+        TextDeltaEvent,
+        ThinkingDeltaEvent,
+        ContentBlockStartEvent,
+        ContentBlockStopEvent,
     ],
     Field(discriminator="type"),
 ]

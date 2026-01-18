@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -9,17 +10,23 @@ from prompt_toolkit.styles import Style as PTStyle
 from rich.console import Console
 from rich.markdown import Markdown
 
+from toy_agent.logger import logger
+
 from .events import (
     AgentCompletedEvent,
     AgentStartedEvent,
     AssistantMessageEvent,
     CommandOutputEvent,
     ConfirmationHandler,
+    ContentBlockStartEvent,
+    ContentBlockStopEvent,
     Event,
     EventHandler,
     FileViewedEvent,
     FinalOutputEvent,
     InputHandler,
+    TextDeltaEvent,
+    ThinkingDeltaEvent,
     TodosUpdatedEvent,
     ToolCompletedEvent,
     ToolErrorEvent,
@@ -116,30 +123,40 @@ class SlashCommandCompleter(Completer):
 class CLIEventHandler(EventHandler):
     """Default CLI event handler that prints formatted output"""
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, stream_output: bool = True):
         self.verbose = verbose
+        self.stream_output = stream_output  # Whether to stream text deltas
         self.console = Console()
         self._status = None  # Track active status spinner
+        self._streaming_text = False  # Track if we're mid-stream
+        self._text_prefix_printed = False  # Track if we printed the text prefix
 
     def handle(self, event: Event) -> None:
         # Pattern match on strongly typed events - type checker validates field access
         match event:
             case AgentStartedEvent():
                 # Start loading spinner
-                self._status = self.console.status("Thinking...", spinner="earth")
+                self._status = self.console.status(
+                    "Thinking... (ctrl+c to interrupt)", spinner="earth"
+                )
                 self._status.start()
 
             case AgentCompletedEvent():
                 # Stop loading spinner
+                logger.debug("Agent completed")
                 if self._status:
                     self._status.stop()
                     self._status = None
 
             case AssistantMessageEvent(text=text):
-                markdown = Markdown("💬 " + text)
-                self.console.print(markdown)
+                # Skip if we already streamed this text
+                logger.debug("Assistant message event received\n")
+                if not self.stream_output:
+                    markdown = Markdown("💬 " + text)
+                    self.console.print(markdown)
 
             case CommandOutputEvent(message=msg, style=style):
+                logger.debug("Command output event received\n")
                 match style:
                     case "error":
                         self.console.print(f"[red]{msg}[/red]")
@@ -151,6 +168,7 @@ class CLIEventHandler(EventHandler):
                         self.console.print(msg)
 
             case ToolErrorEvent(tool_name=name, error=err):
+                logger.debug("Tool error event received\n")
                 self.console.print(f"🛠️ [bold red]Tool {name} error:[/bold red] {err}")
 
             case FileViewedEvent(path=path):
@@ -163,7 +181,10 @@ class CLIEventHandler(EventHandler):
                 self.console.print(f"🛠️ [bold red]Unknown content type:[/bold red] {ct}")
 
             case FinalOutputEvent(result=result):
-                markdown = Markdown("💡 " + result)
+                logger.debug("Final output event received")
+                # Indent newlines to align with text after emoji (3 spaces)
+                indented_result = result.replace("\n", "\n   ")
+                markdown = Markdown("💡 " + indented_result)
                 self.console.print(markdown)
 
             case TodosUpdatedEvent(todos=todos):
@@ -183,6 +204,43 @@ class CLIEventHandler(EventHandler):
             case ToolCompletedEvent(tool_name=name):
                 if self.verbose:
                     self.console.print(f"🛠️ [bold green]{name} completed[/bold green]")
+
+            # Streaming events
+            case ContentBlockStartEvent(block_type=block_type):
+                logger.debug(f"Content block start event received: {block_type}")
+                # Stop spinner on any content block start
+                if self._status:
+                    self._status.stop()
+                    self._status = None
+
+                if block_type == "text" and self.stream_output:
+                    # Print the prefix once using stdout directly
+                    if not self._text_prefix_printed:
+                        sys.stdout.write("💬 ")
+                        sys.stdout.flush()
+                        self._text_prefix_printed = True
+                    self._streaming_text = True
+
+            case TextDeltaEvent(text=text):
+                if self.stream_output and self._streaming_text:
+                    # Print text delta directly to stdout for real-time streaming
+                    # Add indentation after newlines to align with text after emoji
+                    indented_text = text.replace("\n", "\n   ")
+                    sys.stdout.write(indented_text)
+                    sys.stdout.flush()
+
+            case ContentBlockStopEvent():
+                logger.debug("Content block stop event received")
+                if self._streaming_text:
+                    # End the streaming line
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    self._streaming_text = False
+                    self._text_prefix_printed = False
+
+            case ThinkingDeltaEvent():
+                # Optionally display thinking (currently silent)
+                pass
 
 
 class CLIConfirmationHandler(ConfirmationHandler):

@@ -28,14 +28,16 @@ from toy_agent.tools.sub_agent_tool import agent_types
 dotenv.load_dotenv()
 
 # Initialize logger from environment variable (after dotenv loads)
-logger.set_debug(os.getenv("TOY_AGENT_DEBUG", "").lower() in ("1", "true", "yes"))
+verbose = os.getenv("TOY_AGENT_DEBUG", "").lower() in ("1", "true", "yes")
+logger.set_debug(verbose)
+logger.debug("Verbose mode enabled")
 
 app_state = AppState()
 client = anthropic.Client()
 
 # Create event system
 emitter = EventEmitter()
-emitter.add_handler(CLIEventHandler(verbose=False))
+emitter.add_handler(CLIEventHandler(verbose=verbose))
 emitter.set_confirmation_handler(CLIConfirmationHandler())
 
 

@@ -1,8 +1,8 @@
 import json
 
 import anthropic
+from anthropic.lib.streaming import MessageStreamManager
 from anthropic.types import (
-    ContentBlock,
     ContentBlockParam,
     MessageParam,
     ModelParam,
@@ -24,8 +24,11 @@ from .events import (
     AgentCompletedEvent,
     AgentStartedEvent,
     AssistantMessageEvent,
+    ContentBlockStartEvent,
+    ContentBlockStopEvent,
     EventEmitter,
-    UnknownContentEvent,
+    TextDeltaEvent,
+    ThinkingDeltaEvent,
     WebSearchErrorEvent,
 )
 from .settings import Settings
@@ -99,8 +102,9 @@ class Agent:
                 messages.append(msg)
         return messages
 
-    def _call_llm(self, require_output: bool = False) -> list[ContentBlock]:
-        actual_tools = []
+    def _get_tools_and_thinking(self, require_output: bool) -> tuple[list[Tool] | None, bool]:
+        """Prepare tools list and determine if thinking should be enabled."""
+        actual_tools: list[Tool] | None = []
         if require_output:
             # force the output tool to be called
             actual_tools = [self.output_tool]
@@ -118,24 +122,33 @@ class Agent:
 
         # Can't use thinking when forcing a specific tool
         use_thinking = self.thinking_enabled and not require_output
-        messages = self._get_messages_for_api(use_thinking)
+        return actual_tools, use_thinking
 
-        response = self.client.messages.create(
+    def _call_llm_streaming(self, require_output: bool = False) -> MessageStreamManager:
+        """Call the LLM and return a streaming context manager."""
+        actual_tools, use_thinking = self._get_tools_and_thinking(require_output)
+        messages = self._get_messages_for_api(use_thinking)
+        thinking_config = (
+            ThinkingConfigEnabledParam(type="enabled", budget_tokens=10000)
+            if use_thinking
+            else ThinkingConfigDisabledParam(type="disabled")
+        )
+        tool_choice = (
+            ToolChoiceToolParam(name=self.output_tool.tool_name, type="tool")
+            if require_output
+            else ToolChoiceAutoParam(type="auto")
+        )
+        return self.client.messages.stream(
             max_tokens=10001,
             model=self.model,
             messages=messages,
-            thinking=ThinkingConfigEnabledParam(type="enabled", budget_tokens=10000)
-            if use_thinking
-            else ThinkingConfigDisabledParam(type="disabled"),
+            thinking=thinking_config,
             system=self.system_prompt if self.system_prompt else anthropic.omit,
-            tool_choice=ToolChoiceToolParam(name=self.output_tool.tool_name, type="tool")
-            if require_output
-            else ToolChoiceAutoParam(type="auto"),
+            tool_choice=tool_choice,
             tools=[tool.to_anthropic_tool() for tool in actual_tools]
             if actual_tools
             else anthropic.omit,
         )
-        return response.content
 
     def _handle_tool_call(self, tool_name: str, input: dict) -> ToolResult:
         if tool_name == self.output_tool.tool_name:
@@ -146,75 +159,148 @@ class Agent:
         return tool.execute(input)
 
     def _handle_iteration(self, require_output: bool = False) -> str | None:
-        response = self._call_llm(require_output=require_output)
-
         # Collect all content blocks into a single assistant message
         assistant_content: list[ContentBlockParam] = []
         tool_calls: list[tuple[str, str, dict]] = []  # (tool_id, tool_name, input)
         output_result: str | None = None
         text_only_content: list[str] = []  # Collect text content for text-only responses
 
-        for content in response:
-            if content.type == "thinking":
-                assistant_content.append(
-                    ThinkingBlockParam(
-                        type="thinking", thinking=content.thinking, signature=content.signature
-                    )
-                )
-            elif content.type == "text":
-                self.emitter.emit(AssistantMessageEvent(text=content.text))
-                text_only_content.append(content.text)
-                assistant_content.append(TextBlockParam(type="text", text=content.text))
-            elif content.type == "tool_use":
-                assistant_content.append(
-                    ToolUseBlockParam(
-                        type="tool_use", id=content.id, name=content.name, input=content.input
-                    )
-                )
-                tool_calls.append((content.id, content.name, content.input))
-            elif content.type == "server_tool_use":
-                assistant_content.append(
-                    ServerToolUseBlockParam(
-                        type="server_tool_use",
-                        id=content.id,
-                        name=content.name,
-                        input=content.input,
-                    )
-                )
-            elif content.type == "web_search_tool_result":
-                if isinstance(content.content, list):
-                    result_blocks: list[WebSearchResultBlockParam] = []
-                    for result in content.content:
-                        result_blocks.append(
-                            WebSearchResultBlockParam(
-                                type="web_search_result",
-                                title=result.title,
-                                url=result.url,
-                                encrypted_content=result.encrypted_content,
-                                page_age=result.page_age,
+        # Track current content blocks being streamed
+        current_blocks: dict[int, dict] = {}  # index -> accumulated block data
+
+        with self._call_llm_streaming(require_output=require_output) as stream:
+            for event in stream:
+                if event.type == "content_block_start":
+                    idx = event.index
+                    block = event.content_block
+                    self.emitter.emit(ContentBlockStartEvent(index=idx, block_type=block.type))
+
+                    if block.type == "thinking":
+                        current_blocks[idx] = {
+                            "type": "thinking",
+                            "thinking": block.thinking,
+                            "signature": block.signature,
+                        }
+                    elif block.type == "text":
+                        current_blocks[idx] = {"type": "text", "text": ""}
+                    elif block.type == "tool_use":
+                        current_blocks[idx] = {
+                            "type": "tool_use",
+                            "id": block.id,
+                            "name": block.name,
+                            "input_json": "",
+                        }
+                    elif block.type == "server_tool_use":
+                        current_blocks[idx] = {
+                            "type": "server_tool_use",
+                            "id": block.id,
+                            "name": block.name,
+                            "input_json": "",
+                        }
+
+                elif event.type == "content_block_delta":
+                    idx = event.index
+                    delta = event.delta
+
+                    if delta.type == "thinking_delta":
+                        current_blocks[idx]["thinking"] += delta.thinking
+                        self.emitter.emit(ThinkingDeltaEvent(thinking=delta.thinking))
+                    elif delta.type == "signature_delta":
+                        current_blocks[idx]["signature"] = delta.signature
+                    elif delta.type == "text_delta":
+                        current_blocks[idx]["text"] += delta.text
+                        self.emitter.emit(TextDeltaEvent(text=delta.text))
+                    elif delta.type == "input_json_delta":
+                        current_blocks[idx]["input_json"] += delta.partial_json
+
+                elif event.type == "content_block_stop":
+                    idx = event.index
+                    block_data = current_blocks.get(idx)
+                    self.emitter.emit(ContentBlockStopEvent(index=idx))
+
+                    if block_data:
+                        if block_data["type"] == "thinking":
+                            assistant_content.append(
+                                ThinkingBlockParam(
+                                    type="thinking",
+                                    thinking=block_data["thinking"],
+                                    signature=block_data["signature"],
+                                )
                             )
-                        )
-                    assistant_content.append(
-                        WebSearchToolResultBlockParam(
-                            type="web_search_tool_result",
-                            content=result_blocks,
-                            tool_use_id=content.tool_use_id,
-                        )
-                    )
-                else:
-                    self.emitter.emit(WebSearchErrorEvent(error_code=content.content.error_code))
-                    assistant_content.append(
-                        WebSearchToolResultBlockParam(
-                            type="web_search_tool_result",
-                            tool_use_id=content.tool_use_id,
-                            content=WebSearchToolRequestErrorParam(
-                                type="web_search_tool_result_error",
-                                error_code=content.content.error_code,
-                            ),
-                        )
-                    )
-            else:
-                self.emitter.emit(UnknownContentEvent(content_type=content.type))
+                        elif block_data["type"] == "text":
+                            text = block_data["text"]
+                            # Emit the full message event for compatibility
+                            self.emitter.emit(AssistantMessageEvent(text=text))
+                            text_only_content.append(text)
+                            assistant_content.append(TextBlockParam(type="text", text=text))
+                        elif block_data["type"] == "tool_use":
+                            tool_input = json.loads(block_data["input_json"] or "{}")
+                            assistant_content.append(
+                                ToolUseBlockParam(
+                                    type="tool_use",
+                                    id=block_data["id"],
+                                    name=block_data["name"],
+                                    input=tool_input,
+                                )
+                            )
+                            tool_calls.append((block_data["id"], block_data["name"], tool_input))
+                        elif block_data["type"] == "server_tool_use":
+                            tool_input = json.loads(block_data["input_json"] or "{}")
+                            assistant_content.append(
+                                ServerToolUseBlockParam(
+                                    type="server_tool_use",
+                                    id=block_data["id"],
+                                    name=block_data["name"],
+                                    input=tool_input,
+                                )
+                            )
+
+                elif event.type == "message_start":
+                    # Message started, nothing to do
+                    pass
+
+                elif event.type == "message_delta":
+                    # Message metadata update (stop_reason, usage)
+                    pass
+
+                elif event.type == "message_stop":
+                    # Message complete - get final message for web search results
+                    final_message = stream.get_final_message()
+                    for content in final_message.content:
+                        if content.type == "web_search_tool_result":
+                            if isinstance(content.content, list):
+                                result_blocks: list[WebSearchResultBlockParam] = []
+                                for result in content.content:
+                                    result_blocks.append(
+                                        WebSearchResultBlockParam(
+                                            type="web_search_result",
+                                            title=result.title,
+                                            url=result.url,
+                                            encrypted_content=result.encrypted_content,
+                                            page_age=result.page_age,
+                                        )
+                                    )
+                                assistant_content.append(
+                                    WebSearchToolResultBlockParam(
+                                        type="web_search_tool_result",
+                                        content=result_blocks,
+                                        tool_use_id=content.tool_use_id,
+                                    )
+                                )
+                            else:
+                                self.emitter.emit(
+                                    WebSearchErrorEvent(error_code=content.content.error_code)
+                                )
+                                assistant_content.append(
+                                    WebSearchToolResultBlockParam(
+                                        type="web_search_tool_result",
+                                        tool_use_id=content.tool_use_id,
+                                        content=WebSearchToolRequestErrorParam(
+                                            type="web_search_tool_result_error",
+                                            error_code=content.content.error_code,
+                                        ),
+                                    )
+                                )
 
         # Add the assistant message with all content blocks
         if assistant_content:
