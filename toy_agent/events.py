@@ -69,6 +69,19 @@ class CommandOutputEvent:
     type: Literal["command_output"] = field(default="command_output", repr=False)
 
 
+@dataclass
+class AgentStartedEvent:
+    prompt: str
+    type: Literal["agent_started"] = field(default="agent_started", repr=False)
+
+
+@dataclass
+class AgentCompletedEvent:
+    result: str | None
+    interrupted: bool = False
+    type: Literal["agent_completed"] = field(default="agent_completed", repr=False)
+
+
 # Discriminated union - type checker knows which fields are available
 Event = Annotated[
     Union[
@@ -82,6 +95,8 @@ Event = Annotated[
         FinalOutputEvent,
         TodosUpdatedEvent,
         CommandOutputEvent,
+        AgentStartedEvent,
+        AgentCompletedEvent,
     ],
     Field(discriminator="type"),
 ]

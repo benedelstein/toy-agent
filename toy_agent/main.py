@@ -1,5 +1,5 @@
+import argparse
 import os
-import sys
 from pathlib import Path
 
 import anthropic
@@ -10,6 +10,7 @@ from toy_agent.app_state import AppState
 from toy_agent.cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
 from toy_agent.commands import CommandContext, CommandResult, commands
 from toy_agent.events import CommandOutputEvent, EventEmitter, FinalOutputEvent
+from toy_agent.logger import logger
 from toy_agent.settings import SETTINGS, EditMode
 from toy_agent.tools import (
     create_bash_tool,
@@ -25,6 +26,9 @@ from toy_agent.tools.github_tool import create_pull_request_tool
 from toy_agent.tools.sub_agent_tool import agent_types
 
 dotenv.load_dotenv()
+
+# Initialize logger from environment variable (after dotenv loads)
+logger.set_debug(os.getenv("TOY_AGENT_DEBUG", "").lower() in ("1", "true", "yes"))
 
 app_state = AppState()
 client = anthropic.Client()
@@ -76,6 +80,23 @@ def load_system_prompt(prompt_name: str) -> str:
     return base_prompt
 
 
+def build_prompt_with_file_context(
+    prompt: str, app_state: AppState, ttl_seconds: float = 60.0
+) -> str:
+    """Prepend file context to prompt if there are recent file events."""
+    events = app_state.get_and_clear_recent_events(ttl_seconds=ttl_seconds)
+    if not events:
+        return prompt
+
+    context_lines = [
+        f"<file_context>user {e.event_type} ./{e.file_path} in their IDE</file_context>"
+        for e in events
+    ]
+    result = "\n".join(context_lines) + "\n\n" + prompt
+    logger.debug(f"Prompt with file context:\n{result}")
+    return result
+
+
 def handle_prompt(prompt: str, agent: Agent) -> str | None:
     """Handle user prompt, including slash commands."""
     # Handle slash commands via registry
@@ -103,9 +124,12 @@ def handle_prompt(prompt: str, agent: Agent) -> str | None:
             case CommandResult.HANDLED:
                 return None
 
+    # Inject file context from recent file events
+    prompt_with_context = build_prompt_with_file_context(prompt, app_state)
+
     # Regular prompt - run through agent
     try:
-        response = agent.run(prompt=prompt, max_iterations=None)
+        response = agent.run(prompt=prompt_with_context, max_iterations=None)
         return response
     except AgentInterrupted:
         emitter.emit(CommandOutputEvent(message="Interrupted - returning to prompt", style="error"))
@@ -147,6 +171,18 @@ def create_subagent(agent_type: agent_types, agent_emitter: EventEmitter) -> Age
 
 def main():
     """Main entry point for the toy-agent CLI."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Toy Agent - Agentic coding assistant")
+    parser.add_argument(
+        "prompt", nargs="?", help="Initial prompt to run (if not provided, starts interactive mode)"
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
+    # Enable debug mode from CLI arg (overrides environment variable)
+    if args.debug:
+        logger.set_debug(True)
+        logger.debug("Debug mode enabled via CLI argument")
+
     agent = Agent(
         settings=SETTINGS,
         client=client,
@@ -173,19 +209,19 @@ def main():
         from toy_agent.file_watcher import FileWatcher
 
         def handle_file_event(event_type: str, file_path: str):
-            # For now, just print the file events
-            print(f"[File Event] User {event_type}: {file_path}")
+            app_state.add_file_event(event_type, file_path)
 
         project_root = str(Path.cwd())
         file_watcher = FileWatcher(project_root, handle_file_event)
         file_watcher.start()
-        print(f"File watcher enabled for: {project_root}")
     except ImportError:
         print("File watcher dependencies not installed. Run: pip install watchdog")
-    if len(sys.argv) > 1:
-        prompt = sys.argv[1]
-        result = agent.run(prompt=prompt, max_iterations=None)
+
+    # If prompt provided via CLI, run it and exit
+    if args.prompt:
+        result = agent.run(prompt=args.prompt, max_iterations=None)
         emitter.emit(FinalOutputEvent(result=result))
+        return
 
     import time
 
@@ -218,7 +254,6 @@ def main():
     finally:
         if file_watcher:
             file_watcher.stop()
-            print("File watcher stopped.")
 
 
 if __name__ == "__main__":
