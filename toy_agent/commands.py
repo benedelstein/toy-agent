@@ -6,6 +6,7 @@ from typing import Callable
 
 from toy_agent.agent import Agent
 from toy_agent.events import CommandOutputEvent, EventEmitter
+from toy_agent.logger import logger
 from toy_agent.settings import SETTINGS, EditMode
 
 
@@ -78,6 +79,7 @@ def cmd_help(ctx: CommandContext) -> CommandResult:
 Available Commands:
   /help              Show this help message
   /settings edit_mode <ask|always|never>  Configure edit confirmation
+  /debug             Toggle debug mode (shows file events, context injection)
   /clear             Clear conversation history
   /exit              Exit the CLI
 """
@@ -129,6 +131,16 @@ def cmd_clear(ctx: CommandContext) -> CommandResult:
     """Clear conversation history."""
     ctx.agent.clear_history()
     ctx.emitter.emit(CommandOutputEvent(message="Conversation history cleared.", style="success"))
+    return CommandResult.HANDLED
+
+
+@commands.register("/debug")
+def cmd_debug(ctx: CommandContext) -> CommandResult:
+    """Toggle debug mode."""
+    # Toggle debug mode
+    logger.set_debug(not logger.debug_enabled)
+    status = "enabled" if logger.debug_enabled else "disabled"
+    ctx.emitter.emit(CommandOutputEvent(message=f"Debug mode {status}", style="success"))
     return CommandResult.HANDLED
 
 

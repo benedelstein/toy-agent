@@ -10,6 +10,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from .events import (
+    AgentCompletedEvent,
+    AgentStartedEvent,
     AssistantMessageEvent,
     CommandOutputEvent,
     ConfirmationHandler,
@@ -43,6 +45,7 @@ class SlashCommand:
 SLASH_COMMANDS: list[SlashCommand] = [
     SlashCommand("/help", "Show available commands"),
     SlashCommand("/settings", "Configure settings", ["edit_mode"]),
+    SlashCommand("/debug", "Toggle debug mode"),
     SlashCommand("/clear", "Clear conversation history"),
     SlashCommand("/exit", "Exit the CLI"),
 ]
@@ -116,10 +119,22 @@ class CLIEventHandler(EventHandler):
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
         self.console = Console()
+        self._status = None  # Track active status spinner
 
     def handle(self, event: Event) -> None:
         # Pattern match on strongly typed events - type checker validates field access
         match event:
+            case AgentStartedEvent():
+                # Start loading spinner
+                self._status = self.console.status("Thinking...", spinner="earth")
+                self._status.start()
+
+            case AgentCompletedEvent():
+                # Stop loading spinner
+                if self._status:
+                    self._status.stop()
+                    self._status = None
+
             case AssistantMessageEvent(text=text):
                 markdown = Markdown("💬 " + text)
                 self.console.print(markdown)

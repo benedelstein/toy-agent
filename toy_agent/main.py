@@ -1,5 +1,5 @@
+import argparse
 import os
-import sys
 from pathlib import Path
 
 import anthropic
@@ -10,6 +10,7 @@ from toy_agent.app_state import AppState
 from toy_agent.cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
 from toy_agent.commands import CommandContext, CommandResult, commands
 from toy_agent.events import CommandOutputEvent, EventEmitter, FinalOutputEvent
+from toy_agent.logger import logger
 from toy_agent.settings import SETTINGS, EditMode
 from toy_agent.tools import (
     create_bash_tool,
@@ -25,6 +26,9 @@ from toy_agent.tools.github_tool import create_pull_request_tool
 from toy_agent.tools.sub_agent_tool import agent_types
 
 dotenv.load_dotenv()
+
+# Initialize logger from environment variable (after dotenv loads)
+logger.set_debug(os.getenv("TOY_AGENT_DEBUG", "").lower() in ("1", "true", "yes"))
 
 app_state = AppState()
 client = anthropic.Client()
@@ -85,9 +89,12 @@ def build_prompt_with_file_context(
         return prompt
 
     context_lines = [
-        f"<file_context>user opened ./{e.file_path} in their IDE</file_context>" for e in events
+        f"<file_context>user {e.event_type} ./{e.file_path} in their IDE</file_context>"
+        for e in events
     ]
-    return "\n".join(context_lines) + "\n\n" + prompt
+    result = "\n".join(context_lines) + "\n\n" + prompt
+    logger.debug(f"Prompt with file context:\n{result}")
+    return result
 
 
 def handle_prompt(prompt: str, agent: Agent) -> str | None:
@@ -164,6 +171,18 @@ def create_subagent(agent_type: agent_types, agent_emitter: EventEmitter) -> Age
 
 def main():
     """Main entry point for the toy-agent CLI."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Toy Agent - Agentic coding assistant")
+    parser.add_argument(
+        "prompt", nargs="?", help="Initial prompt to run (if not provided, starts interactive mode)"
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
+    # Enable debug mode from CLI arg (overrides environment variable)
+    if args.debug:
+        logger.set_debug(True)
+        logger.debug("Debug mode enabled via CLI argument")
+
     agent = Agent(
         settings=SETTINGS,
         client=client,
@@ -197,10 +216,12 @@ def main():
         file_watcher.start()
     except ImportError:
         print("File watcher dependencies not installed. Run: pip install watchdog")
-    if len(sys.argv) > 1:
-        prompt = sys.argv[1]
-        result = agent.run(prompt=prompt, max_iterations=None)
+
+    # If prompt provided via CLI, run it and exit
+    if args.prompt:
+        result = agent.run(prompt=args.prompt, max_iterations=None)
         emitter.emit(FinalOutputEvent(result=result))
+        return
 
     import time
 

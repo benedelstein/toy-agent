@@ -1,40 +1,19 @@
-"""File watcher for IDE integration - monitors file modifications."""
+"""File watcher for IDE integration - monitors file views (close events), modifications, and creations."""
 
 import threading
 import time
 from pathlib import Path
 from typing import Callable
 
+import pathspec
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-# File extensions to watch
-WATCHED_EXTENSIONS = {
-    ".py",
-    ".md",
-    ".txt",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".toml",
-    ".ts",
-    ".js",
-    ".tsx",
-    ".jsx",
-    ".html",
-    ".css",
-}
+from .logger import logger
 
-# Paths/patterns to ignore
-IGNORED_PATTERNS = {
-    "__pycache__",
+# Always ignore these directories even if not in .gitignore
+ALWAYS_IGNORED_DIRS = {
     ".git",
-    ".pytest_cache",
-    "node_modules",
-    ".venv",
-    "venv",
-    ".mypy_cache",
-    ".ruff_cache",
 }
 
 
@@ -47,18 +26,39 @@ class FileEventHandler(FileSystemEventHandler):
         self._last_events: dict[str, float] = {}
         self._lock = threading.Lock()
         self._debounce_seconds = 1.0
+        self._gitignore_spec = self._load_gitignore()
+
+    def _load_gitignore(self) -> pathspec.PathSpec | None:
+        """Load and parse .gitignore file if it exists."""
+        gitignore_path = self.project_root / ".gitignore"
+        if not gitignore_path.exists():
+            return None
+
+        try:
+            with open(gitignore_path, "r") as f:
+                patterns = f.read().splitlines()
+            return pathspec.PathSpec.from_lines("gitwildmatch", patterns)
+        except Exception:
+            return None
 
     def _should_ignore(self, path: Path) -> bool:
-        """Check if path should be ignored."""
+        """Check if path should be ignored based on .gitignore and hardcoded patterns."""
+        # Always ignore .git directory
         parts = path.parts
-        for pattern in IGNORED_PATTERNS:
-            if pattern in parts:
+        for dir_name in ALWAYS_IGNORED_DIRS:
+            if dir_name in parts:
                 return True
-        return False
 
-    def _should_watch(self, path: Path) -> bool:
-        """Check if file extension should be watched."""
-        return path.suffix.lower() in WATCHED_EXTENSIONS
+        # Check against .gitignore patterns
+        if self._gitignore_spec is not None:
+            try:
+                rel_path = path.relative_to(self.project_root)
+                if self._gitignore_spec.match_file(str(rel_path)):
+                    return True
+            except ValueError:
+                pass  # Path not under project root
+
+        return False
 
     def _handle_event(self, event: FileSystemEvent, event_type: str) -> None:
         """Handle a file event with debouncing."""
@@ -71,8 +71,8 @@ class FileEventHandler(FileSystemEventHandler):
         )
         path = Path(src_path)
 
-        # Check filters
-        if self._should_ignore(path) or not self._should_watch(path):
+        # Check if should be ignored
+        if self._should_ignore(path):
             return
 
         try:
@@ -90,7 +90,12 @@ class FileEventHandler(FileSystemEventHandler):
                 return
             self._last_events[rel_path_str] = now
 
+        logger.debug(f"File event: {event_type} {rel_path_str}")
         self.callback(event_type, rel_path_str)
+
+    def on_closed(self, event: FileSystemEvent) -> None:
+        """Handle file close events (more reliable than on_opened)."""
+        self._handle_event(event, "viewed")
 
     def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification events."""
@@ -102,7 +107,7 @@ class FileEventHandler(FileSystemEventHandler):
 
 
 class FileWatcher:
-    """Watch for file modifications in the project."""
+    """Watch for file views (close events), modifications, and creations in the project."""
 
     def __init__(self, project_root: str, callback: Callable[[str, str], None]):
         self.project_root = Path(project_root)

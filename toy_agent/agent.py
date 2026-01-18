@@ -20,7 +20,14 @@ from anthropic.types import (
     WebSearchToolResultBlockParam,
 )
 
-from .events import AssistantMessageEvent, EventEmitter, UnknownContentEvent, WebSearchErrorEvent
+from .events import (
+    AgentCompletedEvent,
+    AgentStartedEvent,
+    AssistantMessageEvent,
+    EventEmitter,
+    UnknownContentEvent,
+    WebSearchErrorEvent,
+)
 from .settings import Settings
 from .tools import Tool, ToolResult
 from .tools.output_tool import create_output_tool
@@ -251,19 +258,30 @@ class Agent:
     def run(self, prompt: str, max_iterations: int | None = 10) -> str:
         iteration = 0
         self._interrupted = False
-        self.history.append(MessageParam(role="user", content=prompt))
-        while max_iterations is None or iteration < max_iterations:
-            if self._interrupted:
-                self._interrupted = False
-                raise AgentInterrupted("Agent interrupted by user")
-            iteration += 1
-            try:
-                result = self._handle_iteration(require_output=iteration == max_iterations)
-            except KeyboardInterrupt:
-                raise AgentInterrupted("Agent interrupted by user")
-            if result is not None:
-                return result
-        raise Exception("Error: max iterations reached")
+        self.emitter.emit(AgentStartedEvent(prompt=prompt))
+
+        try:
+            self.history.append(MessageParam(role="user", content=prompt))
+            while max_iterations is None or iteration < max_iterations:
+                if self._interrupted:
+                    self._interrupted = False
+                    self.emitter.emit(AgentCompletedEvent(result=None, interrupted=True))
+                    raise AgentInterrupted("Agent interrupted by user")
+                iteration += 1
+                try:
+                    result = self._handle_iteration(require_output=iteration == max_iterations)
+                except KeyboardInterrupt:
+                    self.emitter.emit(AgentCompletedEvent(result=None, interrupted=True))
+                    raise AgentInterrupted("Agent interrupted by user")
+                if result is not None:
+                    self.emitter.emit(AgentCompletedEvent(result=result))
+                    return result
+            raise Exception("Error: max iterations reached")
+        except Exception as e:
+            # Emit completion event even on error if we haven't already
+            if not isinstance(e, AgentInterrupted):
+                self.emitter.emit(AgentCompletedEvent(result=None, interrupted=False))
+            raise
 
     def reset(self):
         self.__init__(settings=self.settings, client=self.client, emitter=self.emitter)

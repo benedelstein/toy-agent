@@ -11,4 +11,5 @@ class Settings:
     edit_mode: EditMode = EditMode.ASK
 
 
+# Initialize settings
 SETTINGS = Settings()
