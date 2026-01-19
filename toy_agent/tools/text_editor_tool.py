@@ -1,3 +1,4 @@
+import difflib
 import os
 from typing import Annotated, Literal, Union
 
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field, RootModel
 from ..events import (
     EventEmitter,
     FileViewedEvent,
+    MenuOption,
     ToolCompletedEvent,
     ToolErrorEvent,
     ToolStartedEvent,
@@ -137,7 +139,7 @@ class TextEditorTool(Tool):
             raise ValueError(f"Invalid command: {cmd.command}")
 
     def _generate_replace_preview(self, content: str, old_str: str, new_str: str) -> str:
-        """Generate a diff-style preview showing what will be replaced."""
+        """Generate a unified diff preview showing what will be replaced."""
         # Check if the old_str exists and is unique
         count = content.count(old_str)
         if count > 1:
@@ -145,44 +147,22 @@ class TextEditorTool(Tool):
         if count == 0:
             return "ERROR: String not found in file"
 
-        # Find context around the match
-        match_index = content.find(old_str)
+        # Generate the new content
+        new_content = content.replace(old_str, new_str, 1)
 
-        # Get surrounding lines for context
-        lines_before = content[:match_index].splitlines()
-        lines_after = content[match_index + len(old_str) :].splitlines()
+        # Generate unified diff with context
+        old_lines = content.splitlines(keepends=True)
+        new_lines = new_content.splitlines(keepends=True)
 
-        # Show up to 3 lines of context before and after
-        context_before = lines_before[-3:] if len(lines_before) > 3 else lines_before
-        context_after = lines_after[:3] if len(lines_after) > 3 else lines_after
+        diff = difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile="before",
+            tofile="after",
+            n=3,  # 3 lines of context
+        )
 
-        # Build the preview
-        preview_lines = []
-        preview_lines.append("\n" + "=" * 60)
-        preview_lines.append("PREVIEW OF CHANGES:")
-        preview_lines.append("=" * 60)
-
-        # Add context before
-        for line in context_before:
-            preview_lines.append(f"  {line}")
-
-        # Show what will be removed (in red/with -)
-        old_lines = old_str.splitlines()
-        for line in old_lines:
-            preview_lines.append(f"- {line}")
-
-        # Show what will be added (in green/with +)
-        new_lines = new_str.splitlines()
-        for line in new_lines:
-            preview_lines.append(f"+ {line}")
-
-        # Add context after
-        for line in context_after:
-            preview_lines.append(f"  {line}")
-
-        preview_lines.append("=" * 60 + "\n")
-
-        return "\n".join(preview_lines)
+        return "".join(diff)
 
     def _run_replace(self, cmd: TextEditorStrReplaceCommand) -> bool:
         with open(cmd.path, "r") as file:
@@ -277,15 +257,42 @@ class TextEditorTool(Tool):
             case EditMode.ASK:
                 pass
 
-        # Use emitter for confirmation
-        approved, reason = self.emitter.request_confirmation(
-            tool_name="str_replace_based_edit_tool", action=command, path=path, preview=contents
+        # Create menu options for file edit confirmation
+        options = [
+            MenuOption(
+                label="Allow",
+                description=f"Allow this {command} operation",
+                value="allow",
+            ),
+            MenuOption(
+                label="Always allow edits",
+                description="Switch to 'always' edit mode for this session",
+                value="always",
+            ),
+            MenuOption(
+                label="Deny",
+                description="Skip this operation",
+                value="deny",
+            ),
+        ]
+
+        # Use emitter for menu confirmation
+        result = self.emitter.request_menu_confirmation(
+            title=f"Confirm '{command}' on file '{path}'",
+            preview=contents,
+            options=options,
         )
-        if not approved:
+
+        if result.selected_value == "always":
+            # Update settings to always allow edits
+            self.settings.edit_mode = EditMode.ALWAYS
+            return True
+        elif result.selected_value == "allow":
+            return True
+        else:  # deny
             raise ValueError(
-                f"Command '{command}' on file '{path}' skipped - user-provided reason: {reason or 'no reason given'}"
+                f"Command '{command}' on file '{path}' skipped - user-provided reason: {result.deny_reason or 'no reason given'}"
             )
-        return True
 
     def to_anthropic_tool(self) -> ToolUnionParam:
         return ToolTextEditor20250728Param(

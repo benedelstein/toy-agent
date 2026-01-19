@@ -2,6 +2,7 @@ from anthropic.types import ToolBash20250124Param, ToolUnionParam
 from pydantic import BaseModel
 
 from ..events import EventEmitter, ToolCompletedEvent, ToolErrorEvent, ToolStartedEvent
+from ..settings import SETTINGS
 from .bash_session import BashSession
 from .tool import Tool, ToolResult
 
@@ -41,18 +42,28 @@ class BashTool(Tool):
         if i.command is None:
             raise ValueError("Command is required")
 
-        # Use emitter for confirmation
-        approved, reason = self.emitter.request_confirmation(
-            tool_name="bash",
-            action="execute",
-            path=None,
+        # Check if command is already in the allow list
+        if SETTINGS.is_bash_command_allowed(i.command):
+            # Auto-approve allowed commands
+            result = self.session.execute_command(i.command)
+            return BashOutput(stdout=result["stdout"], stderr=result["stderr"])
+
+        # Use bash confirmation handler for interactive approval
+        confirmation = self.emitter.request_bash_confirmation(
+            command=i.command,
             preview=f"Running bash command: {i.command}",
         )
-        if not approved:
+
+        if not confirmation.approved:
+            reason = confirmation.deny_reason or "no reason given"
             return BashOutput(
                 is_error=True,
-                stderr=f"Command skipped: {i.command} - {reason or 'no reason given'}",
+                stderr=f"Command skipped: {i.command} - {reason}",
             )
+
+        # If user selected "always allow", add to settings
+        if confirmation.always_allow and confirmation.allow_pattern:
+            SETTINGS.add_allowed_bash_command(confirmation.allow_pattern)
 
         result = self.session.execute_command(i.command)
         return BashOutput(stdout=result["stdout"], stderr=result["stderr"])

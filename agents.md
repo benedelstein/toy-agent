@@ -11,6 +11,17 @@ uv run ruff check .
 uv run toy_agent/main.py
 ```
 
+## Testing your changes
+
+After completing a task, make sure to run these commands to test:
+```bash
+uv run ruff check . # linter check
+uv run ruff format --check . # formatter check
+uv run pyright # type checking
+```
+
+if ruff fails, try to run `uv run ruff check . --fix` to fix the errors.
+
 ## Core Architecture
 
 ### The Agent Loop (agent.py)
@@ -31,24 +42,15 @@ Tools follow a consistent pattern:
 ### Settings & Configuration (settings.py)
 - `EditMode` enum: Controls file editing behavior (`ask`, `always`, `never`)
 - `SETTINGS` singleton: Global configuration accessible to tools
-- Used primarily by `TEXT_EDITOR_TOOL` for confirmation flows
 
-## Available Tools
-
-When working in this repo, you have access to:
-
-1. **read_file** - Read file contents (use for examining code)
-2. **str_replace_based_edit_tool** - View, create, edit files with string replacement or line insertion
-3. **grep** - Search for patterns in files (useful for finding references)
-4. **ping** - Test network connectivity (less useful for code work)
-5. **bash** - Execute bash commands (not shown in default main.py setup)
-6. **output** - Signal task completion with final result
+### Event Handling
+The agent logic is decoupled from the UI. Agent and tools emit events that may be handled by a ui handler. Currently we only have a CLI handler.
 
 ## Working Patterns
 
 ### When Reading Code
 1. Start with `read_file` on the main entry point (usually `main.py` or `agent.py`)
-2. Use `grep` to find specific patterns, function names, or imports
+2. Use `grep` or `glob` to find specific patterns, function names, or imports
 3. Read related files to understand dependencies and flow
 4. Pay attention to type hints - this codebase uses extensive typing
 
@@ -58,42 +60,6 @@ When working in this repo, you have access to:
 3. **Use str_replace**: Provide the EXACT `old_str` (whitespace-sensitive) and the `new_str`
 4. **One change at a time**: Make focused, atomic changes
 5. **Respect existing patterns**: Match the coding style (imports at top, type hints, etc.)
-
-### When Creating New Tools
-Follow the established pattern:
-```python
-from pydantic import BaseModel
-from tools.tool import Tool, ToolResult
-
-class MyToolInput(BaseModel):
-    param1: str
-    param2: int
-
-class MyToolOutput(BaseModel):
-    result: str
-
-def run_my_tool(input: MyToolInput) -> MyToolOutput:
-    # Implementation here
-    return MyToolOutput(result="...")
-
-MY_TOOL = Tool(
-    tool_name="my_tool",
-    description="What the tool does",
-    input_schema=MyToolInput,
-    output_schema=MyToolOutput,
-    run=run_my_tool
-)
-```
-
-Then export it from `tools/__init__.py` and add to agent initialization in `main.py`.
-
-### When Extending the Agent
-Key extension points:
-- **System prompts**: Customize agent behavior via `system_prompt` parameter
-- **Tool selection**: Pass different tool lists to `Agent.__init__`
-- **Thinking config**: Control extended thinking with `thinking_enabled` parameter
-- **Settings**: Add new configuration options to `Settings` class
-- **Stop conditions**: Modify `_handle_iteration` to implement custom stopping logic
 
 ## Code Style & Conventions
 

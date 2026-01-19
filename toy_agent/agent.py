@@ -6,13 +6,12 @@ from anthropic.types import (
     ContentBlockParam,
     MessageParam,
     ModelParam,
+    RedactedThinkingBlockParam,
     ServerToolUseBlockParam,
     TextBlockParam,
     ThinkingBlockParam,
     ThinkingConfigDisabledParam,
     ThinkingConfigEnabledParam,
-    ToolChoiceAutoParam,
-    ToolChoiceToolParam,
     ToolResultBlockParam,
     ToolUseBlockParam,
     WebSearchResultBlockParam,
@@ -33,7 +32,6 @@ from .events import (
 )
 from .settings import Settings
 from .tools import Tool, ToolResult
-from .tools.output_tool import create_output_tool
 
 # Tool name constant for text editor filtering
 TEXT_EDITOR_TOOL_NAME = "str_replace_based_edit_tool"
@@ -70,9 +68,6 @@ class Agent:
         self.emitter = emitter or EventEmitter()
         self._interrupted = False
 
-        # Create output tool with this agent's emitter
-        self.output_tool = create_output_tool(self.emitter)
-
     def clear_history(self) -> None:
         """Clear the conversation history."""
         self.history = []
@@ -102,41 +97,24 @@ class Agent:
                 messages.append(msg)
         return messages
 
-    def _get_tools_and_thinking(self, require_output: bool) -> tuple[list[Tool] | None, bool]:
-        """Prepare tools list and determine if thinking should be enabled."""
-        actual_tools: list[Tool] | None = []
-        if require_output:
-            # force the output tool to be called
-            actual_tools = [self.output_tool]
-        elif self.tools:
-            # filter out edit tool if edit mode is never
-            if self.settings.edit_mode == "never":
-                actual_tools.extend(
-                    [tool for tool in self.tools if tool.tool_name != TEXT_EDITOR_TOOL_NAME]
-                )
-            else:
-                actual_tools.extend(self.tools)
-            actual_tools.append(self.output_tool)  # may also call the output early
-        else:
-            actual_tools = None
+    def _get_tools(self) -> list[Tool] | None:
+        """Prepare tools list based on settings."""
+        if not self.tools:
+            return None
 
-        # Can't use thinking when forcing a specific tool
-        use_thinking = self.thinking_enabled and not require_output
-        return actual_tools, use_thinking
+        # filter out edit tool if edit mode is never
+        if self.settings.edit_mode == "never":
+            return [tool for tool in self.tools if tool.tool_name != TEXT_EDITOR_TOOL_NAME]
+        return list(self.tools)
 
-    def _call_llm_streaming(self, require_output: bool = False) -> MessageStreamManager:
+    def _call_llm_streaming(self) -> MessageStreamManager:
         """Call the LLM and return a streaming context manager."""
-        actual_tools, use_thinking = self._get_tools_and_thinking(require_output)
-        messages = self._get_messages_for_api(use_thinking)
+        actual_tools = self._get_tools()
+        messages = self._get_messages_for_api(self.thinking_enabled)
         thinking_config = (
             ThinkingConfigEnabledParam(type="enabled", budget_tokens=10000)
-            if use_thinking
+            if self.thinking_enabled
             else ThinkingConfigDisabledParam(type="disabled")
-        )
-        tool_choice = (
-            ToolChoiceToolParam(name=self.output_tool.tool_name, type="tool")
-            if require_output
-            else ToolChoiceAutoParam(type="auto")
         )
         return self.client.messages.stream(
             max_tokens=10001,
@@ -144,45 +122,42 @@ class Agent:
             messages=messages,
             thinking=thinking_config,
             system=self.system_prompt if self.system_prompt else anthropic.omit,
-            tool_choice=tool_choice,
             tools=[tool.to_anthropic_tool() for tool in actual_tools]
             if actual_tools
             else anthropic.omit,
         )
 
     def _handle_tool_call(self, tool_name: str, input: dict) -> ToolResult:
-        if tool_name == self.output_tool.tool_name:
-            return self.output_tool.execute(input)
         tool = self.tool_dict.get(tool_name)
         if tool is None:
             raise ValueError(f"Tool {tool_name} not found")
         return tool.execute(input)
 
-    def _handle_iteration(self, require_output: bool = False) -> str | None:
+    def _handle_iteration(self) -> str | None:
         # Collect all content blocks into a single assistant message
         assistant_content: list[ContentBlockParam] = []
         tool_calls: list[tuple[str, str, dict]] = []  # (tool_id, tool_name, input)
-        output_result: str | None = None
         text_only_content: list[str] = []  # Collect text content for text-only responses
 
         # Track current content blocks being streamed
         current_blocks: dict[int, dict] = {}  # index -> accumulated block data
 
-        with self._call_llm_streaming(require_output=require_output) as stream:
+        with self._call_llm_streaming() as stream:
             for event in stream:
                 if event.type == "content_block_start":
                     idx = event.index
                     block = event.content_block
                     self.emitter.emit(ContentBlockStartEvent(index=idx, block_type=block.type))
 
+                    # initialize block to empty state. deltas will update the values.
                     if block.type == "thinking":
                         current_blocks[idx] = {
                             "type": "thinking",
-                            "thinking": block.thinking,
-                            "signature": block.signature,
+                            "thinking": "",  # Initially empty
+                            "signature": "",  # Comes via signature_delta
                         }
                     elif block.type == "text":
-                        current_blocks[idx] = {"type": "text", "text": ""}
+                        current_blocks[idx] = {"type": "text", "text": "", "citations": None}
                     elif block.type == "tool_use":
                         current_blocks[idx] = {
                             "type": "tool_use",
@@ -197,6 +172,14 @@ class Agent:
                             "name": block.name,
                             "input_json": "",
                         }
+                    elif block.type == "web_search_tool_result":
+                        current_blocks[idx] = {
+                            "type": "web_search_tool_result",
+                            "tool_use_id": block.tool_use_id,
+                            "content": [],
+                        }
+                    elif block.type == "redacted_thinking":
+                        current_blocks[idx] = {"type": "redacted_thinking", "data": ""}
 
                 elif event.type == "content_block_delta":
                     idx = event.index
@@ -212,6 +195,10 @@ class Agent:
                         self.emitter.emit(TextDeltaEvent(text=delta.text))
                     elif delta.type == "input_json_delta":
                         current_blocks[idx]["input_json"] += delta.partial_json
+                    elif delta.type == "citations_delta":
+                        if current_blocks[idx]["citations"] is None:
+                            current_blocks[idx]["citations"] = []
+                        current_blocks[idx]["citations"].append(delta.citation)
 
                 elif event.type == "content_block_stop":
                     idx = event.index
@@ -252,6 +239,21 @@ class Agent:
                                     id=block_data["id"],
                                     name=block_data["name"],
                                     input=tool_input,
+                                )
+                            )
+                        elif block_data["type"] == "web_search_tool_result":
+                            assistant_content.append(
+                                WebSearchToolResultBlockParam(
+                                    type="web_search_tool_result",
+                                    content=block_data["content"],
+                                    tool_use_id=block_data["tool_use_id"],
+                                )
+                            )
+                        elif block_data["type"] == "redacted_thinking":
+                            assistant_content.append(
+                                RedactedThinkingBlockParam(
+                                    type="redacted_thinking",
+                                    data=block_data["data"],
                                 )
                             )
 
@@ -310,7 +312,7 @@ class Agent:
         if not tool_calls and text_only_content:
             return "\n".join(text_only_content)
 
-        # Now execute tools and add results as user messages
+        # Execute tools and add results as user messages
         if tool_calls:
             tool_results: list[ToolResultBlockParam] = []
 
@@ -318,7 +320,6 @@ class Agent:
                 tool_result = self._handle_tool_call(tool_name, tool_input)
                 result_dict = tool_result.to_dict()
 
-                # Always add tool result to maintain valid conversation state
                 tool_results.append(
                     ToolResultBlockParam(
                         type="tool_result",
@@ -328,41 +329,34 @@ class Agent:
                     )
                 )
 
-                # Check if this is the output tool
-                if tool_name == "output" and tool_result.data:
-                    output_result = tool_result.data.result
-
             # Add all tool results as a single user message
             self.history.append(MessageParam(role="user", content=tool_results))
 
-        return output_result
+        return None
 
     def interrupt(self):
         """Signal the agent to stop at the next opportunity."""
         self._interrupted = True
 
-    def run(self, prompt: str, max_iterations: int | None = 10) -> str:
-        iteration = 0
+    def run(self, prompt: str) -> str:
         self._interrupted = False
         self.emitter.emit(AgentStartedEvent(prompt=prompt))
 
         try:
             self.history.append(MessageParam(role="user", content=prompt))
-            while max_iterations is None or iteration < max_iterations:
+            while True:
                 if self._interrupted:
                     self._interrupted = False
                     self.emitter.emit(AgentCompletedEvent(result=None, interrupted=True))
                     raise AgentInterrupted("Agent interrupted by user")
-                iteration += 1
                 try:
-                    result = self._handle_iteration(require_output=iteration == max_iterations)
+                    result = self._handle_iteration()
                 except KeyboardInterrupt:
                     self.emitter.emit(AgentCompletedEvent(result=None, interrupted=True))
                     raise AgentInterrupted("Agent interrupted by user")
                 if result is not None:
                     self.emitter.emit(AgentCompletedEvent(result=result))
                     return result
-            raise Exception("Error: max iterations reached")
         except Exception as e:
             # Emit completion event even on error if we haven't already
             if not isinstance(e, AgentInterrupted):

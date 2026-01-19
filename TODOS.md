@@ -1,14 +1,15 @@
 - [x] Github tool - gh cli? maybe need multiple tools, 1 for each action.
 - [x] CLI formatting or better UI
-- [ ] Ask user question tool
+- [x] Stream responses
+- [x] Interrupt responses
+- [x] Show interactive diffs
+- [ ] Multi-choice prompts for accepting edits.
+- [ ] Ask user question tool (for planning)
 - [ ] File watcher to inject open file context
-- [ ] Show interactive diffs
 - [ ] Image uploads
 - [ ] loading state
 - [ ] Better represent bash tool call output
 - [ ] Store and resume session state.
-- [ ] Stream responses
-- [ ] Interrupt responses
 - [ ] CLI: keyboard shortcuts to toggle modes, run commands, interrupt, etc.
 - [ ] Optimize Prompts
 - [ ] Tool search tool

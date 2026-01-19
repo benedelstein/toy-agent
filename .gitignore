@@ -20,3 +20,4 @@ build/
 *.swp
 
 .ruff_cache/
+.toy-agent/

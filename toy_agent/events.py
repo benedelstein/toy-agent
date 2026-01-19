@@ -160,6 +160,66 @@ class ConfirmationHandler(Protocol):
         ...
 
 
+@dataclass
+class BashConfirmationResult:
+    """Result of bash command confirmation with always-allow option."""
+
+    approved: bool
+    always_allow: bool = False  # If True, add command to allow list
+    allow_pattern: str | None = None  # The pattern to always allow (e.g., "find")
+    deny_reason: str | None = None  # Reason if denied
+
+
+class BashConfirmationHandler(Protocol):
+    """Protocol for bash command confirmation with always-allow option."""
+
+    def request_bash_confirmation(self, command: str, preview: str) -> BashConfirmationResult:
+        """
+        Request confirmation for a bash command with options:
+        - Allow (once)
+        - Allow and always allow this command type
+        - Deny (with optional reason)
+        """
+        ...
+
+
+@dataclass
+class MenuOption:
+    """An option in a menu selection."""
+
+    label: str
+    description: str
+    value: str
+
+
+@dataclass
+class MenuConfirmationResult:
+    """Result of a menu confirmation with flexible options."""
+
+    selected_value: str  # The value of the selected option
+    approved: bool  # Convenience: True if not denied
+    deny_reason: str | None = None  # Reason if denied
+
+
+class MenuConfirmationHandler(Protocol):
+    """Protocol for generic menu-based confirmation with customizable options."""
+
+    def request_menu_confirmation(
+        self,
+        title: str,
+        preview: str,
+        options: list[MenuOption],
+    ) -> MenuConfirmationResult:
+        """
+        Request confirmation via a menu with customizable options.
+        - title: The title/context to display
+        - preview: Content preview (e.g., diff, file content)
+        - options: List of MenuOption with label, description, and value
+        - returns: MenuConfirmationResult with selected value and approval status
+        """
+        ...
+
+
 class InputHandler(Protocol):
     """Protocol for requesting user input"""
 
@@ -178,6 +238,8 @@ class EventEmitter:
     def __init__(self):
         self._handlers: list[EventHandler] = []
         self._confirmation_handler: ConfirmationHandler | None = None
+        self._bash_confirmation_handler: BashConfirmationHandler | None = None
+        self._menu_confirmation_handler: MenuConfirmationHandler | None = None
         self._input_handler: InputHandler | None = None
 
     def add_handler(self, handler: EventHandler) -> None:
@@ -191,6 +253,14 @@ class EventEmitter:
     def set_confirmation_handler(self, handler: ConfirmationHandler) -> None:
         """Set the confirmation callback handler"""
         self._confirmation_handler = handler
+
+    def set_bash_confirmation_handler(self, handler: BashConfirmationHandler) -> None:
+        """Set the bash confirmation handler"""
+        self._bash_confirmation_handler = handler
+
+    def set_menu_confirmation_handler(self, handler: MenuConfirmationHandler) -> None:
+        """Set the menu confirmation handler"""
+        self._menu_confirmation_handler = handler
 
     def set_input_handler(self, handler: InputHandler) -> None:
         """Set the input handler"""
@@ -209,6 +279,28 @@ class EventEmitter:
             # Default: always approve if no handler set
             return (True, None)
         return self._confirmation_handler.request_confirmation(tool_name, action, path, preview)
+
+    def request_bash_confirmation(self, command: str, preview: str) -> BashConfirmationResult:
+        """Request bash command confirmation with always-allow option."""
+        if self._bash_confirmation_handler is None:
+            # Default: approve once if no handler set
+            return BashConfirmationResult(approved=True)
+        return self._bash_confirmation_handler.request_bash_confirmation(command, preview)
+
+    def request_menu_confirmation(
+        self,
+        title: str,
+        preview: str,
+        options: list[MenuOption],
+    ) -> MenuConfirmationResult:
+        """Request confirmation via a menu with customizable options."""
+        if self._menu_confirmation_handler is None:
+            # Default: approve if no handler set (select first option)
+            return MenuConfirmationResult(
+                selected_value=options[0].value if options else "allow",
+                approved=True,
+            )
+        return self._menu_confirmation_handler.request_menu_confirmation(title, preview, options)
 
     def request_input(self, prompt: str) -> str:
         """Request user input via the registered handler"""

@@ -3,12 +3,18 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import Application
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style as PTStyle
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.syntax import Syntax
 
 from toy_agent.logger import logger
 
@@ -16,6 +22,8 @@ from .events import (
     AgentCompletedEvent,
     AgentStartedEvent,
     AssistantMessageEvent,
+    BashConfirmationHandler,
+    BashConfirmationResult,
     CommandOutputEvent,
     ConfirmationHandler,
     ContentBlockStartEvent,
@@ -25,6 +33,9 @@ from .events import (
     FileViewedEvent,
     FinalOutputEvent,
     InputHandler,
+    MenuConfirmationHandler,
+    MenuConfirmationResult,
+    MenuOption,
     TextDeltaEvent,
     ThinkingDeltaEvent,
     TodosUpdatedEvent,
@@ -207,7 +218,6 @@ class CLIEventHandler(EventHandler):
 
             # Streaming events
             case ContentBlockStartEvent(block_type=block_type):
-                logger.debug(f"Content block start event received: {block_type}")
                 # Stop spinner on any content block start
                 if self._status:
                     self._status.stop()
@@ -230,7 +240,6 @@ class CLIEventHandler(EventHandler):
                     sys.stdout.flush()
 
             case ContentBlockStopEvent():
-                logger.debug("Content block stop event received")
                 if self._streaming_text:
                     # End the streaming line
                     sys.stdout.write("\n")
@@ -257,11 +266,17 @@ class CLIConfirmationHandler(ConfirmationHandler):
         # Display the preview
         if path:
             self.console.print(
-                f"🛠️ Confirming command '[bold blue]{action}[/bold blue]' on file '[bold blue]{path}[/bold blue]'"
+                f"🛠️ Confirm '[bold blue]{action}[/bold blue]' on file '[bold blue]{path}[/bold blue]'"
             )
         else:
             self.console.print(f"🛠️ [bold blue]Confirming:[/bold blue] {action}")
-        self.console.print(preview)
+
+        # Use Rich Syntax highlighting for diff output
+        if preview.startswith("---") or preview.startswith("@@"):
+            syntax = Syntax(preview, "diff", theme="monokai", line_numbers=True)  # type: ignore
+            self.console.print(syntax)
+        else:
+            self.console.print(preview)
 
         # Get user input
         answer = self.console.input(
@@ -349,3 +364,264 @@ class CLIInputHandler(InputHandler):
             raise KeyboardInterrupt
 
         return user_input
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generic Menu Selection with Arrow-Key Navigation
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class MenuSelectionResult:
+    """Result of a menu selection."""
+
+    selected_index: int
+    selected_value: str
+    deny_reason: str | None = None
+
+
+def show_menu_selection(
+    options: list[MenuOption],
+    deny_option_value: str = "deny",
+) -> MenuSelectionResult:
+    """
+    Generic menu selection with arrow-key navigation.
+
+    Args:
+        options: List of MenuOption to display
+        deny_option_value: The value that triggers reason input (default: "deny")
+
+    Returns:
+        MenuSelectionResult with selected index, value, and optional deny reason
+    """
+    # State for the menu
+    selected_index = 0
+    deny_reason = ""
+    entering_reason = False
+
+    # Find the deny option index for escape/ctrl+c behavior
+    deny_index = next(
+        (i for i, opt in enumerate(options) if opt.value == deny_option_value),
+        len(options) - 1,  # Default to last option if no deny option found
+    )
+
+    # Key bindings
+    kb = KeyBindings()
+
+    @kb.add("up")
+    def move_up(event) -> None:  # type: ignore
+        nonlocal selected_index, entering_reason
+        if not entering_reason:
+            selected_index = (selected_index - 1) % len(options)
+
+    @kb.add("down")
+    def move_down(event) -> None:  # type: ignore
+        nonlocal selected_index, entering_reason
+        if not entering_reason:
+            selected_index = (selected_index + 1) % len(options)
+
+    @kb.add("enter")
+    def confirm(event) -> None:  # type: ignore
+        nonlocal entering_reason
+        if options[selected_index].value == deny_option_value and not entering_reason:
+            entering_reason = True
+        else:
+            event.app.exit(result=selected_index)
+
+    @kb.add("escape")
+    def cancel(event) -> None:  # type: ignore
+        nonlocal entering_reason, selected_index
+        if entering_reason:
+            entering_reason = False
+        else:
+            # Treat escape as deny
+            selected_index = deny_index
+            event.app.exit(result=selected_index)
+
+    @kb.add("c-c")
+    def ctrl_c(event) -> None:  # type: ignore
+        nonlocal selected_index
+        # Treat Ctrl+C as deny
+        selected_index = deny_index
+        event.app.exit(result=selected_index)
+
+    # Handle text input for deny reason
+    @kb.add("<any>")
+    def handle_key(event) -> None:  # type: ignore
+        nonlocal deny_reason, entering_reason
+        if entering_reason:
+            key = event.data
+            if key == "\x7f":  # Backspace
+                deny_reason = deny_reason[:-1]
+            elif len(key) == 1 and key.isprintable():
+                deny_reason += key
+
+    def get_formatted_text() -> list[tuple[str, str]]:
+        """Generate the menu display."""
+        lines: list[tuple[str, str]] = []
+        lines.append(("", "\n"))
+
+        for i, opt in enumerate(options):
+            if i == selected_index:
+                prefix = "  > "
+                style = "bold #61afef"  # Blue highlight
+            else:
+                prefix = "    "
+                style = ""
+
+            lines.append((style, f"{prefix}{opt.label}\n"))
+            if i == selected_index:
+                lines.append(("italic #888888", f"      {opt.description}\n"))
+
+        # Show deny reason input if entering reason
+        if entering_reason:
+            lines.append(("", "\n"))
+            lines.append(("bold", "  Reason (optional, press Enter to confirm): "))
+            lines.append(("#e5c07b", deny_reason))
+            lines.append(("", "_\n"))
+
+        lines.append(("", "\n"))
+        lines.append(("dim", "  Use ↑↓ to navigate, Enter to select, Esc to cancel\n"))
+
+        return lines
+
+    # Create the application
+    layout = Layout(HSplit([Window(FormattedTextControl(get_formatted_text))]))
+
+    style = PTStyle.from_dict(
+        {
+            "": "#ffffff",
+        }
+    )
+
+    app: Application[int] = Application(
+        layout=layout,
+        key_bindings=kb,
+        style=style,
+        full_screen=False,
+    )
+
+    # Run the application
+    try:
+        result_index = app.run()
+    except (EOFError, KeyboardInterrupt):
+        result_index = deny_index
+
+    if result_index is None:
+        result_index = deny_index
+
+    return MenuSelectionResult(
+        selected_index=result_index,
+        selected_value=options[result_index].value,
+        deny_reason=deny_reason if deny_reason else None,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generic Menu Confirmation Handler
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class CLIMenuConfirmationHandler(MenuConfirmationHandler):
+    """CLI menu confirmation handler with arrow-key selection for generic confirmations."""
+
+    def __init__(self) -> None:
+        self.console = Console()
+
+    def request_menu_confirmation(
+        self,
+        title: str,
+        preview: str,
+        options: list[MenuOption],
+    ) -> MenuConfirmationResult:
+        """Show interactive menu for generic confirmation."""
+        # Display the title
+        self.console.print(f"\n🛠️ [bold blue]{title}[/bold blue]")
+
+        # Display the preview with appropriate formatting
+        if preview:
+            if preview.startswith("---") or preview.startswith("@@"):
+                # It's a diff - use syntax highlighting
+                syntax = Syntax(preview, "diff", theme="monokai", line_numbers=True)  # type: ignore
+                self.console.print(syntax)
+            else:
+                # Regular preview - show with indentation
+                self.console.print(
+                    f"   [dim]{preview[:500]}{'...' if len(preview) > 500 else ''}[/dim]"
+                )
+
+        # Use the generic menu selection
+        result = show_menu_selection(options, deny_option_value="deny")
+
+        # Determine if approved based on selected value
+        approved = result.selected_value != "deny"
+
+        return MenuConfirmationResult(
+            selected_value=result.selected_value,
+            approved=approved,
+            deny_reason=result.deny_reason,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bash Confirmation Handler (uses generic menu)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class CLIBashConfirmationHandler(BashConfirmationHandler):
+    """CLI bash confirmation handler with arrow-key selection menu."""
+
+    def __init__(self) -> None:
+        self.console = Console()
+
+    def _get_base_command(self, command: str) -> str:
+        """Extract the base command (first word) from a full command."""
+        parts = command.strip().split()
+        return parts[0] if parts else command
+
+    def _create_options(self, base_command: str) -> list[MenuOption]:
+        """Create the menu options."""
+        return [
+            MenuOption(
+                label="Allow",
+                description="Run this command once",
+                value="allow",
+            ),
+            MenuOption(
+                label=f"Always allow '{base_command}' commands",
+                description="Add to allow list for this session",
+                value="always",
+            ),
+            MenuOption(
+                label="Deny",
+                description="Skip this command",
+                value="deny",
+            ),
+        ]
+
+    def request_bash_confirmation(self, command: str, preview: str) -> BashConfirmationResult:
+        """Show interactive menu for bash command confirmation."""
+        base_command = self._get_base_command(command)
+        options = self._create_options(base_command)
+
+        # Display the command preview
+        self.console.print(f"\n🛠️ [bold blue]Bash command:[/bold blue] {command}")
+        if preview and preview != f"Running bash command: {command}":
+            self.console.print(f"   [dim]{preview}[/dim]")
+
+        # Use the generic menu selection
+        result = show_menu_selection(options, deny_option_value="deny")
+
+        if result.selected_value == "allow":
+            return BashConfirmationResult(approved=True)
+        elif result.selected_value == "always":
+            return BashConfirmationResult(
+                approved=True,
+                always_allow=True,
+                allow_pattern=base_command,
+            )
+        else:  # deny
+            return BashConfirmationResult(
+                approved=False,
+                deny_reason=result.deny_reason,
+            )

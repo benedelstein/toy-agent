@@ -7,7 +7,13 @@ import dotenv
 
 from toy_agent.agent import Agent, AgentInterrupted
 from toy_agent.app_state import AppState
-from toy_agent.cli_handler import CLIConfirmationHandler, CLIEventHandler, CLIInputHandler
+from toy_agent.cli_handler import (
+    CLIBashConfirmationHandler,
+    CLIConfirmationHandler,
+    CLIEventHandler,
+    CLIInputHandler,
+    CLIMenuConfirmationHandler,
+)
 from toy_agent.commands import CommandContext, CommandResult, commands
 from toy_agent.events import CommandOutputEvent, EventEmitter, FinalOutputEvent
 from toy_agent.logger import logger
@@ -39,6 +45,8 @@ client = anthropic.Client()
 emitter = EventEmitter()
 emitter.add_handler(CLIEventHandler(verbose=verbose))
 emitter.set_confirmation_handler(CLIConfirmationHandler())
+emitter.set_bash_confirmation_handler(CLIBashConfirmationHandler())
+emitter.set_menu_confirmation_handler(CLIMenuConfirmationHandler())
 
 
 def get_status_info():
@@ -131,7 +139,7 @@ def handle_prompt(prompt: str, agent: Agent) -> str | None:
 
     # Regular prompt - run through agent
     try:
-        response = agent.run(prompt=prompt_with_context, max_iterations=None)
+        response = agent.run(prompt=prompt_with_context)
         return response
     except AgentInterrupted:
         emitter.emit(CommandOutputEvent(message="Interrupted - returning to prompt", style="error"))
@@ -221,7 +229,7 @@ def main():
 
     # If prompt provided via CLI, run it and exit
     if args.prompt:
-        result = agent.run(prompt=args.prompt, max_iterations=None)
+        result = agent.run(prompt=args.prompt)
         emitter.emit(FinalOutputEvent(result=result))
         return
 

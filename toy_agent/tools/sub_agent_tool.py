@@ -52,7 +52,7 @@ class SubAgentTool(Tool):
     def _run_sub_agent(self, input: SubAgentInput) -> SubAgentOutput:
         # Pass emitter to create_agent so sub-agent gets the same emitter
         agent = self.create_agent(input.agent_type, self.emitter)
-        result = agent.run(prompt=input.prompt, max_iterations=None)
+        result = agent.run(prompt=input.prompt)
         return SubAgentOutput(result=result)
 
     def to_anthropic_tool(self) -> ToolUnionParam:
