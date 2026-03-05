@@ -15,3 +15,4 @@
 - [ ] Tool search tool
 - [ ] Web search tool
 - [ ] Deploy as background agent with sandbox vm? End to end: issue -> code -> verify -> pr (this can come after its an installable package).
+- [ ] Add unit tests for core agent loop
