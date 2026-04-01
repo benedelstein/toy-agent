@@ -19,6 +19,7 @@ from toy_agent.events import CommandOutputEvent, EventEmitter, FinalOutputEvent
 from toy_agent.logger import logger
 from toy_agent.settings import SETTINGS, EditMode
 from toy_agent.tools import (
+    create_ask_user_tool,
     create_bash_tool,
     create_glob_tool,
     create_grep_tool,
@@ -26,6 +27,7 @@ from toy_agent.tools import (
     create_read_file_tool,
     create_sub_agent_tool,
     create_text_editor_tool,
+    create_web_search_tool,
     create_write_todos_tool,
 )
 from toy_agent.tools.github_tool import create_pull_request_tool
@@ -205,7 +207,9 @@ def main():
             create_bash_tool(emitter),
             create_sub_agent_tool(emitter, create_subagent),
             create_write_todos_tool(emitter, app_state),
+            create_ask_user_tool(emitter),
             create_pull_request_tool(emitter),
+            create_web_search_tool(emitter),
         ],
         thinking_enabled=True,
         model="claude-opus-4-5",

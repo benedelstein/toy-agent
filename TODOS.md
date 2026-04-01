@@ -4,7 +4,7 @@
 - [x] Interrupt responses
 - [x] Show interactive diffs
 - [ ] Multi-choice prompts for accepting edits.
-- [ ] Ask user question tool (for planning)
+- [x] Ask user question tool (for planning)
 - [ ] File watcher to inject open file context
 - [ ] Image uploads
 - [ ] loading state
@@ -13,5 +13,5 @@
 - [ ] CLI: keyboard shortcuts to toggle modes, run commands, interrupt, etc.
 - [ ] Optimize Prompts
 - [ ] Tool search tool
-- [ ] Web search tool
+- [x] Web search tool
 - [ ] Deploy as background agent with sandbox vm? End to end: issue -> code -> verify -> pr (this can come after its an installable package).
