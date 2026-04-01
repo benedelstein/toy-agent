@@ -7,6 +7,7 @@ from typing import Callable
 from toy_agent.agent import Agent
 from toy_agent.events import CommandOutputEvent, EventEmitter
 from toy_agent.logger import logger
+from toy_agent.session_store import SessionStore
 from toy_agent.settings import SETTINGS, EditMode
 
 
@@ -81,6 +82,9 @@ Available Commands:
   /settings edit_mode <ask|always|never>  Configure edit confirmation
   /debug             Toggle debug mode (shows file events, context injection)
   /clear             Clear conversation history
+  /save              Save current session to disk
+  /sessions          List saved sessions
+  /resume <id>       Resume a saved session
   /exit              Exit the CLI
 """
     ctx.emitter.emit(CommandOutputEvent(message=help_text, style="info"))
@@ -141,6 +145,83 @@ def cmd_debug(ctx: CommandContext) -> CommandResult:
     logger.set_debug(not logger.debug_enabled)
     status = "enabled" if logger.debug_enabled else "disabled"
     ctx.emitter.emit(CommandOutputEvent(message=f"Debug mode {status}", style="success"))
+    return CommandResult.HANDLED
+
+
+@commands.register("/save")
+def cmd_save(ctx: CommandContext) -> CommandResult:
+    """Save current session to disk."""
+    if not ctx.agent.history:
+        ctx.emitter.emit(
+            CommandOutputEvent(message="Nothing to save — conversation is empty.", style="error")
+        )
+        return CommandResult.HANDLED
+
+    store = SessionStore()
+    session_id = store.save(ctx.agent.history, session_id=ctx.agent.current_session_id)
+    ctx.agent.current_session_id = session_id
+    msg_count = len(ctx.agent.history)
+    ctx.emitter.emit(
+        CommandOutputEvent(
+            message=f"Session saved: {session_id} ({msg_count} messages)", style="success"
+        )
+    )
+    return CommandResult.HANDLED
+
+
+@commands.register("/sessions")
+def cmd_sessions(ctx: CommandContext) -> CommandResult:
+    """List saved sessions."""
+    store = SessionStore()
+    sessions = store.list_sessions()
+
+    if not sessions:
+        ctx.emitter.emit(CommandOutputEvent(message="No saved sessions found.", style="info"))
+        return CommandResult.HANDLED
+
+    lines = ["Saved sessions:", ""]
+    for s in sessions:
+        lines.append(f"  {s['session_id']}  ({s['message_count']} msgs)  {s['summary']}")
+    lines.append("")
+    lines.append("Resume with: /resume <session_id>")
+
+    ctx.emitter.emit(CommandOutputEvent(message="\n".join(lines), style="info"))
+    return CommandResult.HANDLED
+
+
+@commands.register("/resume")
+def cmd_resume(ctx: CommandContext) -> CommandResult:
+    """Resume a saved session."""
+    if len(ctx.args) < 2:
+        ctx.emitter.emit(
+            CommandOutputEvent(
+                message="Usage: /resume <session_id>. Use /sessions to list available sessions.",
+                style="error",
+            )
+        )
+        return CommandResult.HANDLED
+
+    session_id = ctx.args[1]
+    store = SessionStore()
+
+    try:
+        history = store.load(session_id)
+    except FileNotFoundError:
+        ctx.emitter.emit(
+            CommandOutputEvent(
+                message=f"Session not found: {session_id}. Use /sessions to list available sessions.",
+                style="error",
+            )
+        )
+        return CommandResult.HANDLED
+
+    ctx.agent.history = history
+    ctx.agent.current_session_id = session_id
+    ctx.emitter.emit(
+        CommandOutputEvent(
+            message=f"Resumed session {session_id} ({len(history)} messages)", style="success"
+        )
+    )
     return CommandResult.HANDLED
 
 

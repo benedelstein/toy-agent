@@ -19,6 +19,7 @@ from toy_agent.events import CommandOutputEvent, EventEmitter, FinalOutputEvent
 from toy_agent.logger import logger
 from toy_agent.settings import SETTINGS, EditMode
 from toy_agent.tools import (
+    create_ask_user_tool,
     create_bash_tool,
     create_glob_tool,
     create_grep_tool,
@@ -187,6 +188,7 @@ def main():
         "prompt", nargs="?", help="Initial prompt to run (if not provided, starts interactive mode)"
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--resume", metavar="SESSION_ID", help="Resume a saved session")
     args = parser.parse_args()
     # Enable debug mode from CLI arg (overrides environment variable)
     if args.debug:
@@ -205,6 +207,7 @@ def main():
             create_bash_tool(emitter),
             create_sub_agent_tool(emitter, create_subagent),
             create_write_todos_tool(emitter, app_state),
+            create_ask_user_tool(emitter),
             create_pull_request_tool(emitter),
         ],
         thinking_enabled=True,
@@ -212,6 +215,19 @@ def main():
         system_prompt=load_system_prompt(prompt_name="main_agent"),
         emitter=emitter,
     )
+
+    # Resume a saved session if requested
+    if args.resume:
+        from toy_agent.session_store import SessionStore
+
+        store = SessionStore()
+        try:
+            agent.history = store.load(args.resume)
+            agent.current_session_id = args.resume
+            print(f"Resumed session {args.resume} ({len(agent.history)} messages)")
+        except FileNotFoundError:
+            print(f"Session not found: {args.resume}")
+            return
 
     # Initialize file watcher for IDE integration
     file_watcher = None
@@ -247,7 +263,6 @@ def main():
                 result = handle_prompt(prompt, agent)
                 if result is not None:
                     emitter.emit(FinalOutputEvent(result=result))
-                print()  # Add newline after output # TODO: REMOVE
             except KeyboardInterrupt:
                 now = time.time()
                 if (
@@ -262,6 +277,13 @@ def main():
     except KeyboardInterrupt:
         print("\nShutting down...")
     finally:
+        # Auto-save session if there's history
+        if agent.history:
+            from toy_agent.session_store import SessionStore
+
+            store = SessionStore()
+            session_id = store.save(agent.history, session_id=agent.current_session_id)
+            print(f"Session auto-saved: {session_id}")
         if file_watcher:
             file_watcher.stop()
 

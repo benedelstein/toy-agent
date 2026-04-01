@@ -1,3 +1,4 @@
+from .ask_user_tool import AskUserTool, create_ask_user_tool
 from .bash_session import BashSession
 from .bash_tool import BashTool, create_bash_tool
 from .glob_tool import create_glob_tool
@@ -12,12 +13,14 @@ from .tool import Tool, ToolResult
 __all__ = [
     "Tool",
     "ToolResult",
+    "AskUserTool",
     "BashTool",
     "BashSession",
     "ReadFileTool",
     "TextEditorTool",
     "SubAgentTool",
     "WriteTodosTool",
+    "create_ask_user_tool",
     "create_bash_tool",
     "create_glob_tool",
     "create_grep_tool",

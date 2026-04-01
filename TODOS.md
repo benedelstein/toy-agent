@@ -4,7 +4,7 @@
 - [x] Interrupt responses
 - [x] Show interactive diffs
 - [ ] Multi-choice prompts for accepting edits.
-- [ ] Ask user question tool (for planning)
+- [x] Ask user question tool (for planning)
 - [ ] File watcher to inject open file context
 - [ ] Image uploads
 - [ ] loading state

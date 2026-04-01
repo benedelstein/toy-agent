@@ -67,10 +67,20 @@ class Agent:
         self.tool_dict: dict[str, Tool] = {tool.tool_name: tool for tool in tools} if tools else {}
         self.emitter = emitter or EventEmitter()
         self._interrupted = False
+        self._session_id: str | None = None
+
+    @property
+    def current_session_id(self) -> str | None:
+        return self._session_id
+
+    @current_session_id.setter
+    def current_session_id(self, value: str | None) -> None:
+        self._session_id = value
 
     def clear_history(self) -> None:
         """Clear the conversation history."""
         self.history = []
+        self._session_id = None
 
     def _get_messages_for_api(self, use_thinking: bool) -> list[MessageParam]:
         """Build messages list, stripping thinking blocks if thinking is disabled."""
