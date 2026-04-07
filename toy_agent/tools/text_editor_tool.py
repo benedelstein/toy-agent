@@ -130,10 +130,19 @@ class TextEditorTool(Tool):
         elif cmd.command == "insert":
             self._validate_file(cmd.path)
             self._confirm_command(cmd.command, cmd.path, cmd.insert_text)
-            with open(cmd.path, "a") as file:
-                # go to the line
-                file.seek(cmd.insert_line)
-                file.write(cmd.insert_text)
+            with open(cmd.path, "r") as file:
+                lines = file.readlines()
+
+            if cmd.insert_line < 1:
+                raise ValueError(f"insert_line must be >= 1, got {cmd.insert_line}")
+
+            # insert_line is 1-indexed and inserts before the given line.
+            # If insert_line is beyond EOF+1, append at end.
+            insert_idx = min(cmd.insert_line - 1, len(lines))
+            lines.insert(insert_idx, cmd.insert_text)
+
+            with open(cmd.path, "w") as file:
+                file.writelines(lines)
             return TextEditorOutput(content=f"Line {cmd.insert_line} inserted")
         else:
             raise ValueError(f"Invalid command: {cmd.command}")
